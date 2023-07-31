@@ -1,10 +1,10 @@
 # RAIL sompz
 
 [![Template](https://img.shields.io/badge/Template-LINCC%20Frameworks%20Python%20Project%20Template-brightgreen)](https://lincc-ppt.readthedocs.io/en/latest/)
-[![DOI](https://zenodo.org/badge/223043497.svg)](https://zenodo.org/badge/latestdoi/223043497)
-[![codecov](https://codecov.io/gh/LSSTDESC/rail_som/branch/main/graph/badge.svg)](https://codecov.io/gh/LSSTDESC/rail_som)
-[![PyPI](https://img.shields.io/pypi/v/pz-rail-som?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/pz-rail-som/)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/LSSTDESC/rail_som/smoke-test.yml)](https://github.com/LSSTDESC/rail_som/actions/workflows/smoke-test.yml)
+[![DOI](TODO)
+[![codecov](TODO)](TODO)
+[![PyPI](TODO)](TODO)
+[![GitHub Workflow Status](TODO)](TODO)
 
 **sompz** - RAIL estimator, summarizer, and classifier using the SOMPZ method described in [Buchs, Davis, et al.](https://arxiv.org/pdf/1901.05005.pdf) and [Myles, Alarcon et al.](https://arxiv.org/pdf/2012.08566.pdf). 
 
