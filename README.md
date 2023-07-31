@@ -1,10 +1,10 @@
 # RAIL sompz
 
 [![Template](https://img.shields.io/badge/Template-LINCC%20Frameworks%20Python%20Project%20Template-brightgreen)](https://lincc-ppt.readthedocs.io/en/latest/)
-[![DOI](TODO)
-[![codecov](TODO)](TODO)
-[![PyPI](TODO)](TODO)
-[![GitHub Workflow Status](TODO)](TODO)
+[![DOI](TODO)]
+[![codecov](TODO)](TODO)]
+[![PyPI](TODO)](TODO)]
+[![GitHub Workflow Status](TODO)](TODO)]
 
 **sompz** - RAIL estimator, summarizer, and classifier using the SOMPZ method described in [Buchs, Davis, et al.](https://arxiv.org/pdf/1901.05005.pdf) and [Myles, Alarcon et al.](https://arxiv.org/pdf/2012.08566.pdf). 
 
