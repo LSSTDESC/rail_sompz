@@ -1,5 +1,7 @@
-        import pandas as pd
-        import h5py
+import numpy as np
+import numba
+import pandas as pd
+import h5py
 
 class SelfOrganizingMap(object):
     def __init__(self, w, shape=None):
@@ -465,3 +467,13 @@ def evaluate_chi2(x, ivar, w, n_dims, one_over_n_dims, index, cell, chi2_break=2
         if give_up:
             break
     return chi2
+
+@numba.jit(nopython=True)
+def unravel_index(c, map_shape, cout):
+    ndim = len(map_shape)
+    ci = c + 0
+    for i in range(ndim - 1, 0 - 1, -1):
+        cj = ci % map_shape[i]
+        cout[i] = cj
+        ci -= cj
+        ci //= map_shape[i]
