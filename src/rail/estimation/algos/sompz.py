@@ -160,3 +160,15 @@ class SOMPZEstimator(CatEstimator):
         Run SOMPZ on a chunk of data
         """
         #TODO
+class CellMap(object):
+    # TODO: consider moving to another file so that sompz.py contains only
+    # informers, estimators, and summarizers
+    """This class will link to two Self-Organizing Maps.
+       This class will contain functionality to infer n(z)
+       given the two self organizing maps"""
+    def __init__(self):
+        pass
+    def read(cls, path, name=''):
+        pass
+    def write(cls, path, name=''):
+        pass
