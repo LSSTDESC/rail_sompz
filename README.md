@@ -4,7 +4,7 @@
 [![DOI](https://zenodo.org/badge/223043497.svg)](https://zenodo.org/badge/latestdoi/223043497)
 [![codecov](https://codecov.io/gh/LSSTDESC/rail_sompz/branch/main/graph/badge.svg)](https://codecov.io/gh/LSSTDESC/rail_sompz)
 [![PyPI](https://img.shields.io/pypi/v/pz-rail-sompz?color=blue&logo=pypi&logoColor=white)](https://pypi.org/project/pz-rail-sompz/)
-[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/LSSTDESC/rail_som/smoke-test.yml)](https://github.com/LSSTDESC/rail_som/actions/workflows/smoke-test.yml)
+[![GitHub Workflow Status](https://img.shields.io/github/actions/workflow/status/LSSTDESC/rail_sompz/smoke-test.yml)](https://github.com/LSSTDESC/rail_sompz/actions/workflows/smoke-test.yml)
 
 **sompz** - RAIL estimator, summarizer, and classifier using the SOMPZ method described in [Buchs, Davis, et al. 2019](https://arxiv.org/pdf/1901.05005.pdf) and [Myles, Alarcon et al. 2021](https://arxiv.org/pdf/2012.08566.pdf). 
 
