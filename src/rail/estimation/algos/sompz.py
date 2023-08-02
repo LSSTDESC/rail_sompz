@@ -14,6 +14,7 @@ from ceci.config import StageParameter as Param
 from rail.estimation.estimator import CatEstimator, CatInformer
 from rail.core.utils import RAILDIR
 from rail.sompz.utils import RAIL_SOMPZ_DIR
+from rail.sompz.utils import * # TODO
 from rail.core.common_params import SHARED_PARAMS
 
 class SOMPZInformer(CatInformer):
@@ -101,8 +102,6 @@ class SOMPZEstimator(CatEstimator):
         self.modeldict = self.model
 
     def _preprocess_magnitudes(self, data):
-        from desc_sompz.sompz_tools_py3 import e_mag2frac
-
         bands = self.config.bands
         errs = self.config.err_bands
 
