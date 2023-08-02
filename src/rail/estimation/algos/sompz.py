@@ -16,11 +16,6 @@ from rail.core.utils import RAILDIR
 from rail.sompz.utils import RAIL_SOMPZ_DIR
 from rail.core.common_params import SHARED_PARAMS
 
-def nzfunc(z, z0, alpha, km, m, m0):  # pragma: no cover
-    zm = z0 + (km * (m - m0))
-    return np.power(z, alpha) * np.exp(-1. * np.power((z / zm), alpha))
-
-
 class SOMPZInformer(CatInformer):
     """Inform stage for SOMPZEstimator, 
     """
@@ -33,21 +28,22 @@ class SOMPZInformer(CatInformer):
         """Init function, init config stuff
         """
         CatInformer.__init__(self, args, comm=comm)
+        # TODO: initialize SOM of specified dimensions
         """
         self.TODO = TODO
         """
 
     def run(self):
-        """compute the best fit prior parameters
+        """train SOM and compute redshift 
         """
-
+        # TODO: train Deep SOM with deep field (DF) data
+        # TODO: train Wide SOM with wide field (WF) data
+        # TODO: compute p(z|c), redshift distributions in deep SOM cells
+        # TODO: compute p(c|chat), transfer function
+        # relating deep SOM cells c to wide SOM cells chat
 
 class SOMPZEstimator(CatEstimator):
-    """CatEstimator subclass to implement basic marginalized PDF for SOMPZ
-    In addition to the marginalized redshift PDF, we also compute several
-    ancillary quantities that will be stored in the ensemble ancil data:
-    zmode: mode of the PDF
-    amean: mean of the PDF
+    """CatEstimator subclass to compute redshift PDFs for SOMPZ
     """
     name = "SOMPZEstimator"
     config_options = CatEstimator.config_options.copy()
@@ -55,7 +51,7 @@ class SOMPZEstimator(CatEstimator):
     config_options.update(TODO)
     """
     def __init__(self, args, comm=None):
-        """Constructor, build the CatEstimator, then do BPZ specific setup
+        """Constructor, build the CatEstimator, then do SOMPZ specific setup
         """
         CatEstimator.__init__(self, args, comm=comm)
 
@@ -104,32 +100,6 @@ class SOMPZEstimator(CatEstimator):
         CatEstimator.open_model(self, **kwargs)
         self.modeldict = self.model
 
-    def _load_templates(self):
-        from desc_sompz.useful_py3 import get_str, get_data, match_resol
-
-        # The redshift range we will evaluate on
-        self.zgrid = np.linspace(self.config.zmin, self.config.zmax, self.config.nzbins)
-        z = self.zgrid
-
-        data_path = self.data_path
-        columns_file = self.config.columns_file
-        ignore_rows = ["M_0", "OTHER", "ID", "Z_S"]
-        filters = [f for f in get_str(columns_file, 0) if f not in ignore_rows]
-
-        spectra_file = os.path.join(data_path, "SED", self.config.spectra_file)
-        spectra = [s[:-4] for s in get_str(spectra_file)]
-
-        nt = len(spectra)
-        nf = len(filters)
-        nz = len(z)
-        flux_templates = np.zeros((nz, nt, nf))
-
-        ab_dir = os.path.join(data_path, "AB")
-        os.makedirs(ab_dir, exist_ok=True)
-
-        TODO 
-        return flux_templates
-
     def _preprocess_magnitudes(self, data):
         from desc_sompz.sompz_tools_py3 import e_mag2frac
 
@@ -174,57 +144,20 @@ class SOMPZEstimator(CatEstimator):
         flux = 10.0**(-0.4 * mags)
         flux_err = flux * (10.0**(0.4 * mag_errs) - 1.0)
 
-        # Check if an object is seen in each band at all.
-        # Fluxes not seen at all are listed as infinity in the input,
-        # so will come out as zero flux and zero flux_err.
-        # Check which is which here, to use with the ZP errors below
-        seen1 = (flux > 0) & (flux_err > 0)
-        seen = np.where(seen1)
-        # unseen = np.where(~seen1)
-        # replace Joe's definition with more standard SOMPZ style
-        nondetect = 99.
-        nondetflux = 10.**(-0.4 * nondetect)
-        unseen = np.isclose(flux, nondetflux, atol=nondetflux * 0.5)
-
-        # replace mag = 99 values with 0 flux and 1 sigma limiting magnitude
-        # value, which is stored in the mag_errs column for non-detects
-        # NOTE: We should check that this same convention will be used in
-        # LSST, or change how we handle non-detects here!
-        flux[unseen] = 0.
-        flux_err[unseen] = 10.**(-0.4 * np.abs(mag_errs[unseen]))
-
-        # Add zero point magnitude errors.
-        # In the case that the object is detected, this
-        # correction depends onthe flux.  If it is not detected
-        # then SOMPZ uses half the errors instead
-        add_err = np.zeros_like(flux_err)
-        add_err[seen] = ((zp_frac * flux)**2)[seen]
-        add_err[unseen] = ((zp_frac * 0.5 * flux_err)**2)[unseen]
-        flux_err = np.sqrt(flux_err**2 + add_err)
-
-        # Convert non-observed objects to have zero flux
-        # and enormous error, so that their likelihood will be
-        # flat. This follows what's done in the sompz script.
-        nonobserved = -99.
-        unobserved = np.isclose(mags, nonobserved)
-        flux[unobserved] = 0.0
-        flux_err[unobserved] = 1e108
-
+        # Convert to Lupton et al. 1999 magnitudes ('Luptitudes')
+        # TODO
+        
         # Upate the flux dictionary with new things we have calculated
         fluxdict['flux'] = flux
         fluxdict['flux_err'] = flux_err
-        m_0_col = self.config.bands.index(self.config.ref_band)
-        fluxdict['mag0'] = mags[:, m_0_col]
         
         return fluxdict
 
-    def _estimate_pdf(self, flux_templates, kernel, flux, flux_err, mag_0, z):
-        from desc_sompz.sompz_tools_py3 import p_c_z_t
-        #from desc_sompz.prior_from_dict import prior_function
-        return TODO
+    def _estimate_pdf(self, flux, flux_err):
+        return #TODO
 
     def _process_chunk(self, start, end, data, first):
         """
         Run SOMPZ on a chunk of data
         """
-        TODO
+        #TODO

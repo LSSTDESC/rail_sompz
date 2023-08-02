@@ -3,4 +3,4 @@
 import os
 from rail import sompz
 
-RAIL_SOMPZ_DIR = os.path.abspath(os.path.join(os.path.dirname(bpz.__file__), '..', '..'))
+RAIL_SOMPZ_DIR = os.path.abspath(os.path.join(os.path.dirname(sompz.__file__), '..', '..'))

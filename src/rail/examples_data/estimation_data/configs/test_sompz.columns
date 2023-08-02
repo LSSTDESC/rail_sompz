@@ -1,5 +1,5 @@
-#This file is used by DESC_BPZ to figure out which data columns correspond to which filter
-#and whether to include additional error convoluation or offsets.  See BPZ documentation
+#This file is used by DESC_SOMPZ to figure out which data columns correspond to which filter
+#and whether to include additional error convoluation or offsets.  See SOMPZ documentation
 #for further details
 #Filter        columns  cal(AB or Vega,optional)  zp_error  zp_offset
 DC2LSST_u      mag_u_lsst, mag_err_u_lsst	AB     	  		  0.005	    0.0
