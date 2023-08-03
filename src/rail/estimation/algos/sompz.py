@@ -25,23 +25,43 @@ class SOMPZInformer(CatInformer):
     """
     config_options.update(TODO)
     """
+    inputs = [('input_spec_data', TableHandle),
+              ('input_deep_data', TableHandle),
+              ('input_wide_data', TableHandle),
+              ]
+    outputs = [('model_som_deep', ModelHandle),
+               ('model_som_wide', ModelHandle)]
+    
     def __init__(self, args, comm=None):
         """Init function, init config stuff
         """
         CatInformer.__init__(self, args, comm=comm)
-        # TODO: initialize CellMap containing
-        # SOMs of specified dimensions
         """
         self.TODO = TODO
         """
-
     def run(self):
-        """train SOM and compute redshift 
+        """train SOMs
         """
-        # TODO: train Deep SOM with deep field (DF) data
-        # this is a method run on a som instance
-        # TODO: train Wide SOM with wide field (WF) data
-        # this is a method run on a som instance
+        # TODO define arguments
+        # TODO reconcile arguments given and expected
+        # TODO: connect kwargs with config file
+        cm = CellMapDESY3.fit(self.get_data('input_spec_data'),
+                              data_train_deep=self.get_data('input_deep_data'),
+                              data_train_wide=self.get_data('input_wide_data'),
+                              **self.config.asdict())
+        self.add_data('model_som_deep',  cm.deep_som)
+        self.add_data('model_som_wide',  cm.wide_som)
+
+    def inform(self, input_spec_data, input_deep_data, input_wide_data):
+        self.add_data('input_spec_data', input_spec_data)
+        self.add_data('input_deep_data', input_deep_data)
+        self.add_data('input_wide_data', input_wide_data)
+        
+        self.run()
+        self.finalize()
+
+        return dict(model_som_deep=self.get_handle('model_som_deep'),
+                    model_som_wide=self.get_handle('model_som_wide'))
         
 class SOMPZEstimator(CatEstimator):
     """CatEstimator subclass to compute redshift PDFs for SOMPZ
@@ -72,12 +92,17 @@ class SOMPZEstimator(CatEstimator):
 
     def _estimate_pdf(self, flux, flux_err):
         # TODO: compute p(z|c), redshift distributions in deep SOM cells
+
         # TODO: compute p(c|chat), transfer function
         # relating deep SOM cells c to wide SOM cells chat
+        cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
+
         # TODO: compute p(chat), occupation in wide SOM cells
         # TODO: compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
         # TODO: construct tomographic bins bhat = {chat}
         # TODO: compute p(z|bhat) \propto sum_chat p(z|chat)
+
+
         return
 
     def _process_chunk(self, start, end, data, first):

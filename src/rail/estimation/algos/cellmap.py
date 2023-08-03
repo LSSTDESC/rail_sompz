@@ -6,8 +6,6 @@ import h5py
 from .som import SelfOrganizingMap, unravel_index
 
 class CellMap(object):
-    # TODO: consider moving to another file so that sompz.py contains only
-    # informers, estimators, and summarizers
     """This class will link to two Self-Organizing Maps.
        This class will contain functionality to infer n(z)
        given the two self organizing maps"""
@@ -121,7 +119,10 @@ class CellMap(object):
                     # path already exists. But we don't want to save because we have no idea if the column is long enough.
                     del h5f[col]
                     h5f.create_dataset(col, data=data)
-    def update(self, data=None, overlap_weight=None, pcchat=None, wide_som=None, deep_som=None, wide_columns=None, deep_columns=None, wide_err_columns=None, deep_err_columns=None):
+    def update(self, data=None,
+               overlap_weight=None, pcchat=None,
+               wide_som=None, deep_som=None,
+               wide_columns=None, deep_columns=None, wide_err_columns=None, deep_err_columns=None):
         """Returns a new cellmap with new data and pcchat. Everything is copied
         """
         # checking all the variables. There probably is a better way
@@ -228,8 +229,13 @@ class CellMap(object):
         print('Creating class object')
         new_cm = self.update(data=self.data, pcchat=pcchat)
         return new_cm
+class CellMapDESY3(CellMap):
     @classmethod
-    def fitDESY3(cls, spec_data, overlap_weight, wide_columns, wide_err_columns, deep_columns, deep_err_columns, data_train_deep, data_train_wide, zp, deep_kwargs={}, wide_kwargs={}, **kwargs):
+    def fit(cls, spec_data,
+            overlap_weight, wide_columns, wide_err_columns,
+            deep_columns, deep_err_columns,
+            data_train_deep, data_train_wide,
+            .zp, deep_kwargs={}, wide_kwargs={}, **kwargs):
         # overlap_weight: Weights of galaxies in spec_data, to account for shear response, or uneven number of times these galaxies were drawn in the wide data
 
         t0 = time.time()
@@ -258,42 +264,6 @@ class CellMap(object):
         cell_deep = deep_som.assign(deep_x, deep_ivar, diag_ivar=deep_diag_ivar)
         spec_data['cell_deep'] = cell_deep
 
-        pcchat = 0
-
-        log('Creating class object', t0)
-        return cls(spec_data, overlap_weight, wide_som, deep_som, pcchat, wide_columns, wide_err_columns, deep_columns, deep_err_columns, zp, **kwargs)
-
-    @classmethod
-    def fitDESY3_deep_only(cls, spec_data, overlap_weight, deep_columns, deep_err_columns, data_train_deep, zp, deep_kwargs={}, **kwargs):
-
-        t0 = time.time()
-
-        deep_kwargs.update(kwargs)
-
-        deep_diag_ivar = True
-
-        log('Fitting SOM to deep data', t0)
-        cls.zp = zp        
-        deep_x = cls.get_x_deep(data_train_deep, deep_columns, zp)
-        deep_ivar = cls.get_ivar_deep(data_train_deep, deep_columns, deep_err_columns)
-        deep_som = SelfOrganizingMap.fit(deep_x, deep_ivar, diag_ivar=deep_diag_ivar, **deep_kwargs)
-
-        wide_x = None
-        wide_ivar = None
-        wide_som = SelfOrganizingMap(w=np.zeros((64, 64)),shape=(64,64))
-        wide_columns = None
-        wide_err_columns = None
-
-        # get deep columns
-        log('Loading spec_data', t0)
-        deep_x = cls.get_x_deep(spec_data, deep_columns, zp)
-        deep_ivar = cls.get_ivar_deep(spec_data, deep_columns, deep_err_columns)
-
-        # do deep assignments
-        log('Assigning SOM Deep', t0)
-        cell_deep = deep_som.assign(deep_x, deep_ivar, diag_ivar=deep_diag_ivar)
-        spec_data['cell_deep'] = cell_deep
-        spec_data['cell_wide'] = np.zeros(len(cell_deep))
         pcchat = 0
 
         log('Creating class object', t0)
