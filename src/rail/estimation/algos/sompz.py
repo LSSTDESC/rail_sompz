@@ -9,6 +9,14 @@ import pandas as pd
 import scipy.integrate
 import glob
 import qp
+
+#import pickle
+import sys
+import yaml
+from sompz import NoiseSOM as ns
+
+import fitsio
+
 import tables_io
 from ceci.config import StageParameter as Param
 from rail.estimation.estimator import CatEstimator, CatInformer
@@ -42,15 +50,53 @@ class SOMPZInformer(CatInformer):
     def run(self):
         """train SOMs
         """
+        # TODO handle cfgfile io
         # TODO define arguments
         # TODO reconcile arguments given and expected
-        # TODO: connect kwargs with config file
-        cm = CellMapDESY3.fit(self.get_data('input_spec_data'),
-                              data_train_deep=self.get_data('input_deep_data'),
-                              data_train_wide=self.get_data('input_wide_data'),
-                              **self.config.asdict())
-        self.add_data('model_som_deep',  cm.deep_som)
-        self.add_data('model_som_wide',  cm.wide_som)
+        # TODO connect kwargs with config file
+        with open(cfgfile, 'r') as fp:
+            cfg = yaml.safe_load(fp)
+
+        # Read variables from config file
+        output_path = cfg['out_dir']
+        som_dim = cfg['deep_som_dim']
+        input_deep_balrog_file = cfg['deep_balrog_file']
+        bands = cfg['deep_bands']
+        bands_label = cfg['deep_bands_label']
+        bands_err_label = cfg['deep_bands_err_label']
+        
+        deep_balrog_data = fitsio.read(input_deep_balrog_file) # reconcile with TableHandle
+
+        # Create flux and flux_err vectors
+        len_deep = len(deep_balrog_data[bands_label + bands[0]])
+        fluxes_d = np.zeros((len_deep, len(bands)))
+        fluxerrs_d = np.zeros((len_deep, len(bands)))
+
+        for i, band in enumerate(bands):
+            print(i, band)
+            fluxes_d[:, i] = deep_balrog_data[bands_label + band]
+            fluxerrs_d[:, i] = deep_balrog_data[bands_err_label + band]
+
+        # Train the SOM with this set (takes a few hours on laptop!)
+        nTrain = fluxes_d.shape[0]
+
+        # Scramble the order of the catalog for purposes of training
+        indices = np.random.choice(fluxes_d.shape[0], size=nTrain, replace=False)
+
+        # Some specifics of the SOM training
+        hh = ns.hFunc(nTrain, sigma=(30, 1))
+        metric = ns.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
+
+        # Now training the SOM 
+        deep_som = ns.NoiseSOM(metric, fluxes_d[indices, :], fluxerrs_d[indices, :],
+                               learning=hh,
+                               shape=(som_dim, som_dim),
+                               wrap=False, logF=True,
+                               initialize='sample',
+                               minError=0.02)
+        
+        self.add_data('model_som_deep',  deep_som)
+        self.add_data('model_som_wide',  wide_som)
 
     def inform(self, input_spec_data, input_deep_data, input_wide_data):
         self.add_data('input_spec_data', input_spec_data)

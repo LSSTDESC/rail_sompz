@@ -1,479 +1,689 @@
 import numpy as np
-import numba
-import pandas as pd
-import h5py
+import pandas
+from matplotlib import pyplot as pl
 
-class SelfOrganizingMap(object):
-    def __init__(self, w, shape=None):
-        """A class to encapsulate the SOM functions written out below, and to
-        hold together the resultant variables
 
-        Parameters
-        ----------
-        w :     self organizing map weights (*map_shapes, input_dims)
-        shape : shape of the self organizing map (map_dim_1, map_dim_2, ... input_dim). If not specified, will try to figure out the shape from w
+# import cmasher as cmr
+
+class NoiseSOM:
+    """Class to build a SOM that deals with noisy data."""
+
+    def __init__(self, 
+                 metric, 
+                 data, 
+                 errors, 
+                 learning,
+                 shape=(32, 32),
+                 minError=0.01,
+                 wrap=False,
+                 logF=True,
+                 initialize='uniform',
+                 gridOverDimensions=None):
         """
-        if shape is not None:
-            self._shape = shape
-            self._map_shape = shape[:-1]
-            self._ndim = len(self._map_shape)
-            self._input_shape = shape[-1]
-            self._size = np.prod(shape[:-1])
+        metric: a class to define the distance metric and shifting rules.
+        data, errors: arrays of shape (M,N) giving the values and errors, respectively,
+                      for each of the N features of M training points.  If
+                      data=None, and an array is passed as initialize argument,
+                      then this will be adopted as the weights with no training.
+        learning: a function giving strength of cell shifts as function of training
+                 iteration number and the distance (in SOM space) between a cell
+                 and the BMU.  Takes arguments ( xy, shape, wrap, index of bmu, iteration)
+                 and returns an array of given shape holding values for each cell.
+        shape: shape of the SOM cell array (any number of dimensions allowed)
+        minError: floor placed on observational error on each feature (or fractional
+                 error if logF=True).
+        wrap:  does the SOM have periodic boundary conditions?
+        logF:  should features be treated logarithmically for initial setup?
+        initialize:  how to set up initial values of weights, choices:
+            'uniform': randomly spaced uniformly within (log) bounds of data
+            'sample':  start from a sample of the data
+            <array>:   use specified array of dimens shape+(N,)
+        gridOverDimensions: if you give a tuple of length equal to the number of
+                 dimensions of the SOM, then the weights will be initialized to be
+                 in a (log) grid over these dimensions of feature space
+                 (and retain other initialization method in other dimensions).
+        """
 
-            self.w = w
-            self._w_shape = w.reshape(shape)
+        # save parameters
+        self.metric = metric
+        self.shape = np.array(shape)
+        self.wrap = wrap
+        self.logF = logF
+        self.minError = minError
+        if data is None:
+            # No data given for training.  We'd better have an array given to initialize.
+            if isinstance(initialize, np.ndarray):
+                # Last dimension of input weights is feature length
+                self.N = initialize.shape[-1]
+                # Initialize with given array
+                if initialize.shape[:-1] == tuple(self.shape):
+                    # Copy and flatten the weight array
+                    self.weights = np.array(initialize).reshape(-1, self.N)
+                elif len(initialize.shape) == 2 and np.prod(self.shape) == initialize.shape[0]:
+                    # Array is already flattened, just copy it
+                    self.weights = np.array(initialize)
+                else:
+                    raise ValueError('Wrong shape for initialize ndarray', initialize.shape)
+                if self.logF and np.min(self.weights.flatten()) <= 0:
+                    # Cannot deal with negative weights in a log SOM:
+                    raise ValueError('Non-positive feature in initialization of ' +
+                                     'log-domain NoiseSOM')
+                return  # No training needed
+            else:
+                # Failure if there is no initial weight vector given.
+                raise ValueError('Neither training data nor weight matrix given for NoiseSOM')
+
+        # Train the SOM using data
+
+        self.N = data.shape[1]
+        nTrain = data.shape[0]
+
+        if self.logF:
+            ee = np.maximum(errors, np.abs(data) * self.minError)
         else:
-            # interpret from the SOM w if we can
-            self._shape = w.shape
-            self._map_shape = w.shape[:-1]
-            self._ndim = len(self._map_shape)
-            self._input_shape = w.shape[-1]
-            self._size = np.prod(w.shape[:-1])
+            ee = np.maximum(errors, self.minError)
 
-            # flatten w
-            self._w_shape = w
-            self.w = w.reshape((self._size, self._input_shape))
-
-        assert self.w.shape == (self._size, self._input_shape), "SOM assumes cells flattened to 1d indexing"
-
-    def __getitem__(self, *args, **kwargs):
-        return self._w_shape.__getitem__(*args, **kwargs)
-
-    @property
-    def ndim(self):
-        return self._ndim
-
-    @property
-    def size(self):
-        return self._size
-
-    @property
-    def shape(self):
-        return self._shape
-
-    @property
-    def map_shape(self):
-        return self._map_shape
-
-    @property
-    def input_shape(self):
-        return self._input_shape
-
-    @classmethod
-    def read(cls, path, name='som'):
-        w = pd.read_hdf(path, '{0}/weight'.format(name)).values
-        try:
-            shape = pd.read_hdf(path, '{0}/shape'.format(name)).values
-        except KeyError:
-            shape = None
-
-        try:
-            # old version
-            kind = pd.read_hdf(path, '{0}/type'.format(name))['type'].values[0]
-        except TypeError:
-            with h5py.File(path, 'r') as h5f:
-                kind = h5f['{0}/type'.format(name)][:].tolist()[0]
-                kind = kind.decode('utf-8')
-
-        som_class = getattr(sompz, kind)
-        som = som_class(w, shape=shape)
-        return som
-
-    def write(self, path, name='som'):
-        pd.DataFrame(self.w).to_hdf(path, '{0}/weight'.format(name))
-        pd.Series(self.shape).to_hdf(path, '{0}/shape'.format(name))
-        # pd.DataFrame({'type': [self.__class__.__name__]}).to_hdf(path, '{0}/type'.format(name))
-        with h5py.File(path, 'r+') as h5f:
-            try:
-                h5f.create_dataset('{0}/type'.format(name), data=[self.__class__.__name__.encode('utf-8')])
-            except RuntimeError:
-                del h5f['{0}/type'.format(name)]
-                h5f.create_dataset('{0}/type'.format(name), data=[self.__class__.__name__.encode('utf-8')])
-
-    def copy(self):
-        return self.__class__(self.w.copy(), self._shape)
-
-    def __call__(self, x, ivar):
-        return self.evaluate(x, ivar)
-
-    def evaluate(self, x, ivar):
-        """Return chi2 of input x's and ivar's
-
-        Parameters
-        ----------
-        x :         Input vector (n_samples, input_shape)
-        ivar :      Input inverse variance of x (n_samples, input_shape, input_shape)
-
-        Returns
-        -------
-        chi2 :      Chi2 fit of each sample to each map cell (n_samples, som_size)
-
-        Notes
-        -----
-        The input x does not have to have the full span of self.input_shape.
-        The chi2 will be evaluated only up to the shape of x. This means that
-        you can use a subset of the dimensions as follows: if we trained on
-        dimensions griz, then you could pass in gr, but not gi or iz.
-
-        """
-        # check number of dims required
-        dim = x.shape[1]
-        if dim != self.input_shape:
-            print('Warning! Trying to evaluate SOM with shape {0} using input of shape {1}. I hope you meant to do this!'.format(self.input_shape, dim))
-
-        n_samples, n_dims = x.shape
-        chi2 = np.zeros((n_samples, self.size), dtype=np.float64)
-        evaluate_som(x, ivar, self.w, chi2)  # operates on chi2
-        return chi2
-
-    def cell1d_to_cell(self, c):
-        """Takes 1d assignment vector and turns into Nd
-
-        Parameters
-        ----------
-        c :     A list of integers (n_samples)
-
-        Returns
-        -------
-        cND :   Cell assignments (len(map_shape), n_samples)
-        """
-        cND = np.unravel_index(c, self.map_shape)
-        return cND
-
-    def cell_to_cell1d(self, cND):
-        """Takes Nd assignment vector and turns into 1d
-
-        Parameters
-        ----------
-        cND :   Cell assignments (len(map_shape), n_samples)
-
-        Returns
-        -------
-        c :     A list of integers (n_samples)
-        """
-        c = np.ravel_multi_index(cND, self.map_shape)
-        return c
-
-    def cell1d_to_cell2d(self, c):
-        """Takes 1d assignment vector and turns into 2d
-
-        Parameters
-        ----------
-        c :     A list of integers (n_samples)
-
-        Returns
-        -------
-        c0, c1: Two dimensional versions of c
-
-        """
-        # NOTE: should be exactly same as cell1d_to_cell
-        c0 = c % self.map_shape[0]
-        c1 = c // self.map_shape[0]
-        return c0, c1
-
-    def cell2d_to_cell1d(self, c0, c1):
-        """Takes 1d assignment vector and turns into 2d
-
-        Parameters
-        ----------
-        c0, c1: Two dimensional versions of c
-
-        Returns
-        -------
-        c :     A list of integers (n_samples)
-
-        """
-        # NOTE: should be exactly same as cell_to_cell1d
-        c = c1 * self.map_shape[0] + c0
-        return c
-
-    def assign(self, x, ivar, verbose=True, diag_ivar=False):
-        """Assign sample to a som cell
-
-        Parameters
-        ----------
-        x :         input data of shape (n_samples, n_dim)
-        ivar :      inverse variance of input data (n_samples, n_dim, n_dim)
-        verbose :   Print extra information?
-
-        Returns
-        -------
-        cell :      Best matching cell (by chi2) for each sample (n_samples) in
-                    1d coordinate
-
-        """
-        # check number of dims required
-        dim = x.shape[1]
-        if dim != self.input_shape and verbose:
-            print('Warning! Trying to assign to SOM with shape {0} using input of shape {1}. I hope you meant to do this!'.format(self.input_shape, dim))
-
-        n_samples = len(x)
-        cell = np.zeros(n_samples, dtype=np.int32)
-        # cell = assign_bmu(x, ivar, self.w, cell, verbose, diag_ivar)
-        assign_bmu(x, ivar, self.w, cell, verbose, diag_ivar)
-        return cell    
-def train_som(x, ivar, map_shape=[10, 10], learning_rate=0.5, max_iter=2e6, min_val=1e-4, verbose=False, diag_ivar=False, replace=False):
-    """Calculate Self Organizing Map
-
-    Parameters
-    ----------
-    x :             input data of shape (n_samples, n_dim)
-    ivar :          inverse variance of input data (n_samples, n_dim, n_dim)
-    map_shape :     desired output map shape = [dim1, dim2]. (n_out_dim,)
-    learning_rate : float usually between 0 and 1. Sets how large of a
-                    change we can effect in the weights at each step by
-                    multiplying the change by:
-                        learning_rate ** (step_t / total_t)
-    max_iter :      maximum number of steps in algorithm fit
-    min_val :       minimum parameter difference we worry about in updating
-                    SOM. This in practice usually doesn't come up, as we limit
-                    the range of cells a SOM may update to be less than one
-                    wrap around the map.
-    verbose :       Print updates?
-
-    Returns
-    -------
-    w : self organizing map weights (dim1, dim2, n_dims)
-
-    Notes
-    -----
-    Suggest whitening your data to span 0-1 range before training
-
-    """
-
-    # initialize w
-    # WARNING: initial w is between 0 and 1, not the full range of values in x
-    if verbose:
-        print('Initializing SOM weight map with shape ({0}, {1})'.format(np.prod(map_shape), x.shape[1]))
-    w = np.random.random(size=(np.prod(map_shape), x.shape[1]))
-    # select what x and ivar we cycle through
-    max_iter = int(max_iter)
-    if verbose:
-        print('Choosing {0} draws from {1} training samples'.format(max_iter, len(x)))
-    choices = build_choices(x, max_iter, replace)
-
-    # update w
-    # these arrays cannot be made inside numba functions with nopython=True, so we make them here:
-    cND = np.zeros(len(map_shape), dtype=int)
-    best_cellND = np.zeros(len(map_shape), dtype=int)
-    sigma2_s = np.max(map_shape) ** 2
-    update_som_weights(x, ivar, w, choices, cND, best_cellND, learning_rate, sigma2_s, min_val, map_shape, verbose, diag_ivar)
-
-    return w
-
-@numba.jit(nopython=True)  # use nopython to make sure we aren't dropping back to python objects
-def update_som_weights(x, ivar, w, choices, cND, best_cellND, learning_rate, sigma2_s, min_val, map_shape, verbose=False, diag_ivar=False):
-    """Update Self Organizing Map
-
-    Parameters
-    ----------
-    x : input data of shape (n_samples, n_dim)
-    ivar : inverse variance of input shape (n_samples, n_dim, n_dim)
-    w : initial self organizing map weights (w_dims, n_dims)
-    choices : indices of samples to draw from x
-    learning_rate : float usually between 0 and 1. Sets how large of a
-                    change we can effect in the weights at each step by
-                    multiplying the change by:
-                        learning_rate ** (step_t / total_t)
-    min_val : minimum parameter difference we worry about in updating SOM
-    map_shape : shape of map w is supposed to be, not including n_dims
-    verbose : print updates?
-
-    Returns
-    -------
-    w : self organizing map weights (dim1, dim2, n_dims)
-
-    Notes
-    -----
-    n_dims is decided based on x, not w
-
-    """
-    n_samples, n_dims = x.shape
-    w_dims = w.shape[0]
-    map_dims = len(map_shape)
-    n_iter = len(choices)
-
-    # sigma2_s = (np.min([j_dims, k_dims])) ** 2
-    j_dims = 0
-    for i in range(map_dims):
-        ji = map_shape[i]
-        if ji > j_dims:
-            j_dims = ji
-    # set the limit in distance the SOM will update
-    max_N_diff = np.int(0.5 * j_dims + 1)
-
-    n_print_iter = 10000
-    # print(n_samples, n_dims, j_dims, k_dims, n_iter, max_N_diff)
-
-    one_over_n_iter = 1. / n_iter
-    one_over_n_dims = 1. / n_dims
-
-    for t in range(n_iter):
-        index = choices[t]
-        # find index of minimal chi2
-        chi2_min, c_min = find_minimum_chi2(x, ivar, w, w_dims, n_dims, one_over_n_dims, index, diag_ivar)
-        if c_min == -1:
-            raise Exception('Must assign a cell when fitting SOM')
-
-        # if we are only taking one step, then use the values we stuck in
-        if t == 0 and n_iter == 1:
-            t_ratio = t * one_over_n_iter
-            # learning rate
-            a = learning_rate
-            sigma_neg2_t = sigma2_s ** -1
+        # Create SOM and initial weight vectors
+        # First get weight bounds
+        if self.logF:
+            # Spread uniformly on log space, clipping low features at +1-sigma
+            minF = np.log(np.min(np.maximum(data, errors), axis=0))
+            maxF = np.log(np.max(data, axis=0))
         else:
-            t_ratio = t * one_over_n_iter
-            # learning rate
-            a = learning_rate ** t_ratio
-            sigma_neg2_t = sigma2_s ** (t_ratio - 1)
+            # Spread linearly to max/in
+            minF = np.min(data, axis=0)
+            maxF = np.max(data, axis=0)
 
-        # window the indices we update
-        N_diff = np.int(np.sqrt(np.abs(np.log(min_val / a) / sigma_neg2_t)))
-        if verbose:
-            if t % n_print_iter == 0:
-                print('step t: ', t, ' . Fraction done: ', t_ratio)
-                # print('Distance away we we would update based on min_val and time step: ', N_diff, ' . Max distance away we would ever look : ', max_N_diff)
-                # print('t / total steps: ', t_ratio, ' learning rate ** tratio: ', a, ' j_dims ** 2 ** (tratio - 1) :', sigma_neg2_t)
-                print('index: ', index, ' current best cell: ', c_min, ' chi2 of best cell: ', chi2_min)
-        if N_diff > max_N_diff:
-            N_diff = max_N_diff
+        nCells = np.product(shape)
+        if initialize == 'uniform':
+            # Populate weights with random numbers
+            self.weights = np.random.rand(nCells, self.N)
+            self.weights = minF + (maxF - minF) * self.weights
+            if self.logF:
+                # Put weights back into linear form
+                self.weights = np.exp(self.weights)
+        elif initialize == 'sample':
+            # Populate weights with a random sample from the data
+            indices = np.random.choice(data.shape[0], size=self.shape,
+                                       replace=False).flatten()
+            if logF:
+                # Allow no negatives - lower bound at 1-sigma
+                self.weights = np.maximum(data[indices, :], errors[indices, :])
+            else:
+                self.weights = data[indices, :]
+        elif isinstance(initialize, np.ndarray):
+            # Initialize with given array
+            if initialize.shape == tuple(self.shape) + (self.N,):
+                # Copy and flatten the weight array
+                self.weights = np.array(initialize).reshape(-1, self.N)
+            elif len(initialize.shape) == 2 and np.prod(self.shape) == initialize.shape[0]:
+                # Array is already flattened, just copy it
+                self.weights = np.array(initialize)
+            else:
+                raise ValueError('Wrong shape for initialize ndarray', initialize.shape)
+            if self.logF and np.min(self.weights.flatten()) <= 0:
+                raise ValueError('Non-positive feature in initialization of ' +
+                                 'log-domain NoiseSOM')
+        else:
+            raise ValueError('Invalid initialize: ' + str(initialize))
 
-        if N_diff == 0:
-            # we are done, so stop!
-            # print('Stopping SOM at Iteration {0}'.format(t))
-            print('Stopping SOM because N_diff == 0')
-            print('step: ', t)
-            return w
+        if gridOverDimensions is not None:
+            # Place the initial weights in a grid over some dimensions
+            if len(gridOverDimensions) != len(self.shape) or np.min(gridOverDimensions) < 0 or np.max(
+                    gridOverDimensions) >= len(self.shape):
+                print("NoiseSOM requested grid over", gridOverDimensions,
+                      "does not match dimensions of SOM", self.shape)
+                raise TypeError
+            indices = np.unravel_index(np.arange(self.weights.shape[0]),
+                                       [self.shape[i] for i in gridOverDimensions])
+            for i, j in enumerate(gridOverDimensions):
+                self.weights[:, j] = minF[j] + \
+                                     (0.5 + indices[i]) * ((maxF[j] - minF[j]) / self.shape[j])
+                if self.logF:
+                    self.weights[:, j] = np.exp(self.weights[:, j])
 
-        # get j, k, etc of best matching cell
-        unravel_index(c_min, map_shape, best_cellND)
+        # Create array holding x1,x2,... coordinates of
+        # each cell in SOM space
+        xxx = np.meshgrid(*[np.arange(i) for i in self.shape])
+        xy = np.vstack([i.flatten() for i in xxx[::-1]]).transpose()
+        del xxx
 
-        # update all cells
-        for c in range(w_dims):
-            # convert to ND
-            unravel_index(c, map_shape, cND)
+        # Shuffle data for training
+        order = np.arange(nTrain)
+        np.random.shuffle(order)
 
-            # get distance, including accounting for toroidal topology
-            diff2 = 0.0
-            for di in range(map_dims):
-                best_c = best_cellND[di]
-                ci = cND[di]
-                i_dims = map_shape[di]
-                diff = (ci - best_c)
-                while diff < 0:
-                    diff += i_dims
-                while diff >= i_dims:
-                    diff -= i_dims
-                diff2 += diff * diff
+        # Training loop
+        minLearn = 0.001  # Don't update cells whose learning function is below this
+        for i in range(nTrain):
+            if i % 10000 == 0:
+                print('Training', i)
+            # Calculate p , get BMU
+            dd = data[order[i]]
+            err = ee[order[i]]
+            bmu = self.getBMU(dd, err)
 
-            # get Hbk
-            Hbk = np.exp(-sigma_neg2_t * diff2)
+            # Get the learning function values
+            fLearn = learning(xy, shape=self.shape, wrap=self.wrap, bmu=bmu, iteration=i)
 
-            # update
-            for i in range(n_dims):
-                w[c, i] += a * Hbk * (x[index, i] - w[c, i])
+            # At this point mask to only cells that will learn something
+            use = fLearn >= minLearn
 
-    # return w
+            # Ask the metric to update the cell features 
+            ww = self.weights[use, :]
+            self.metric.update(ww, fLearn[use], dd, err)
+            self.weights[use, :] = ww
 
-@numba.jit(nopython=True)
-def assign_bmu(x, ivar, w, bmu, verbose=True, diag_ivar=False):
-    """Assign best matching unit from self organizing map weights
+        return
 
-    Parameters
-    ----------
-    x : input data of shape (n_samples, n_dim)
-    ivar : inverse variance of input shape (n_samples, n_dim, n_dim)
-    w : self organizing map weights (dim1, dim2, n_dim)
+    def chisq(self, data, errors):
+        """
+        Return (flattened) array of -2 ln(probabilities) for each cell,
+        i.e. distance-squared.
+        """
 
-    Returns
-    -------
-    bmu : best matching cell that each x goes into (n_samples,)
+        return self.metric(self.weights, data, errors)
 
+    def getBMU(self, data, errors):
+        """
+        Assign a feature vector to a cell with maximum probability.
+        Returns flattened index of BMU.
+        """
+        return np.argmin(self.chisq(data, errors))
+
+    def classify(self, data, errors):
+        """
+        Return a vector of BMU's for each row of data.
+        Also returns a vector of the distance^2 to each BMU.
+        """
+        # Break the inputs into chunks for speed
+        blocksize = 10
+        nPts = data.shape[0]
+        bmu = np.zeros(nPts, dtype=int)
+        dsq = np.zeros(nPts, dtype=float)
+        for first in range(0, nPts, blocksize):
+            if first % 10 == 0:
+                print("classifying", first)
+            last = min(first + blocksize, nPts)
+            d = self.metric(self.weights, data[first:last], errors[first:last])
+            bb = np.argmin(d, axis=0)
+            bmu[first:last] = bb
+            dsq[first:last] = d[bb, np.arange(d.shape[1])]
+        return bmu, dsq
+
+    def fuzzyProb(self, fluxes, invVars,
+                  scale=None, sPenalty=None,
+                  maxScale=False):
+        """
+        Calculate the relative probability of obtaining the `fluxes` given the
+        SOM cell fluxes, assuming Gaussian errors on each feature with
+        `invvar` as inverse variance of each feature.
+
+        Marginalize over the `scale` array of scaling factors of nodal fluxes,
+        with `sPenalty` giving the -2 ln(p(s)) each scale value.
+
+        `fluxes` and `invVars` are both (nTargets,nFeatures) arrays.
+
+        if `scale` or `sPenalty` are `None`, then they are taken from the
+        SOM metric.
+
+        If `maxScale` is True, then the probability of the best-fit scale factor
+        is used (including its `sPenalty`), rather than marginalizing.
+
+        Returns an (nCells,nTargets) array giving relative p(flux | cell) under assumption
+        of diagonal Gaussian errors on the fluxes.  Note these do *not* have
+        common normalization across targets, only across cells for fixed target.
+        """
+        chunk = 256
+        probs = np.zeros((self.weights.shape[0], fluxes.shape[0]), dtype=float)
+        if scale is None:
+            scale = self.metric.s
+        if sPenalty is None:
+            sPenalty = self.metric.sPenalty
+        for first in range(0, fluxes.shape[0], chunk):
+            last = min(fluxes.shape[0], first + chunk)
+            ss = slice(first, last)
+            if first % 1024 == 0:
+                print('Doing', first)
+            # Contract sums over feature dimensions
+            snn = np.einsum('ik,ik,jk->ij', self.weights, self.weights, invVars[ss], optimize=True)
+            snt = np.einsum('ik,jk,jk->ij', self.weights, fluxes[ss], invVars[ss], optimize=True)
+            stt = np.einsum('jk,jk,jk->j', fluxes[ss], fluxes[ss], invVars[ss], optimize=True)
+            # Construct chisq as function of s
+            chisq = stt[np.newaxis, :, np.newaxis] - (2 * scale) * snt[:, :, np.newaxis] \
+                    + snn[:, :, np.newaxis] * (scale * scale) + sPenalty
+            # To avoid underflows, take out min chisq for each target
+            chisq0 = np.min(np.min(chisq, axis=2), axis=0)
+            chisq -= chisq0[np.newaxis, :, np.newaxis]
+            if maxScale:
+                # Take best scale factor 
+                probs[:, ss] = np.exp(-0.5 * np.min(chisq, axis=2))
+            else:
+                # Sum probabilities over s
+                probs[:, ss] = np.sum(np.exp(-0.5 * chisq), axis=2)
+            del chisq
+        return probs
+
+
+class hFunc:
+    """
+    An implementation of a SOM learning function as given by Speagle
     """
 
-    n_samples, n_dims = x.shape
-    w_dims = w.shape[0]
+    def __init__(self, nTrain, a=(0.5, 0.1), sigma=(10., 1.)):
+        self.nTrain = float(nTrain)
+        self.a = a
+        self.sigma = sigma
+        return
 
-    n_print_iter = 10000
-    one_over_n_dims = 1. / n_dims
+    def __call__(self, xy, shape, wrap, bmu, iteration):
+        """
+        Return array of learning weights (0<=wt<=1) for each cell
+        """
+        f = iteration / self.nTrain
+        aFactor = 1. / ((1. - f) / self.a[0] + f / self.a[1])
+        invS = ((1. - f) / self.sigma[0] + f / self.sigma[1]) ** 2
+        dxy = xy - np.unravel_index(bmu, shape)
+        if wrap:
+            dxy = np.remainder(dxy + shape // 2, shape) - shape // 2
+        return aFactor * np.exp(-0.5 * np.sum(dxy * dxy, axis=1) * invS)
 
-    for t in range(n_samples):
-        if t % n_print_iter == 0:
-            if verbose:
-                print('assigning sample ', t, ' out of ', n_samples)
 
-        chi2_min, bmu_t = find_minimum_chi2(x, ivar, w, w_dims, n_dims, one_over_n_dims, t, diag_ivar)
+'''
+ Define a metric interface as having two calls
+ `Metric(cell_features, target_features, target_errors)`  which returns an 
+    nCells x nTargets matrix giving in element (i,j) the 
+    distance^2 from cell at i to target j  
+    (a "cell" does not have an error associated with it).
+ 
+ `Metric.update(cells, fractions, features, errors)` updates the nCells x nFeatures `cells` array
+     to move `fractions` of the way to the `features`, where `fractions` has shape (nCells,) of
+     values between 0 and 1.  The new nodal features must remain positive.
+'''
 
-        # hooray, now save the best matching unit for input t
-        bmu[t] = bmu_t
 
-    # return bmu
-@numba.jit(nopython=True)
-def find_minimum_chi2(x, ivar, w, w_dims, n_dims, one_over_n_dims, index, diag_ivar=False):
-    """Find which cell has the minimum chi2
+class AsinhMetric:
+    """
+    Class meeting the metric interface which does a good job
+    of being linear at low S/N, log at high S/N for data"""
 
-    Parameters
-    ----------
-    x : input data of shape (n_samples, n_dims)
-    ivar : inverse variance of input shape (n_samples, n_dims, n_dims)
-    w : self organizing map weights (w_dims, n_dims)
-    w_dims : number of map cells
-    n_dims : input vector dims
-    index : which object in x we are looking at
+    def __init__(self, lnScaleSigma=0.4, lnScaleStep=0.02, maxSigma=3.):
+        """Create a distance metric between scale-smeared cells and some features
+        lnScaleSigma: sigma of a Gaussian in ln(s), where s is an overall scale factor
+            applied to the feature vector of a SOM cell, that will be marginalized
+            over.  Enter <=0 to just use unit scale factor.
+        maxSigma:  largest number of sigma to extend scale factor.
+        lnScaleStep: step size in ln(scale) used when integrating over scale
+        """
+        if lnScaleSigma > 0.:
+            # Create an array of scale factors and distance-sq to the
+            # center of the fuzzy template
+            nS = int(np.ceil(maxSigma * lnScaleSigma / lnScaleStep))
+            lnS = np.linspace(-maxSigma * lnScaleSigma, 3. * lnScaleSigma, nS)
+            self.s = np.exp(lnS)
+            self.sPenalty = (lnS / lnScaleSigma) ** 2
+        else:
+            self.s = np.ones(1, dtype=float)
+            self.sPenalty = self.s * 0.
+        return
 
-    Returns
-    -------
-    chi2_min : minimum chi2 of best match
-    cell_min : index of best match
+    def __call__(self, cells, features, errors):
+        if len(cells.shape) != 2:
+            raise ValueError('Metric cells is wrong dimension')
+        if features.shape != errors.shape:
+            raise ValueError('Metric features and errors do not match')
+        if cells.shape[-1] != features.shape[-1]:
+            raise ValueError('Metric cells and features have mismatched no. of features')
+        if len(features.shape) == 1:
+            vf = (features / errors).reshape(1, features.shape[0])
+            ee = errors.reshape(vf.shape)
+        elif len(features.shape) == 2:
+            vf = features / errors
+            ee = errors
+            # vf is S/N of the features, with shape (nTargets,nFeatures)
+        else:
+            raise ValueError('Metric features has invalid dimensions')
+        vn = cells[:, np.newaxis, :] / ee[np.newaxis, :, :]
+        # And vn is cell S/N with shape (nCells,nTargets, nFeatures)
 
+        # Here is our rescaling function:
+        sum = np.zeros((vn.shape[0], vn.shape[1]), dtype=float)
+
+        # Consider a range of rescaling options for the cells
+        # and return the one with least distance.
+        # Break the cells into bunches to avoid super-large 4d arrays
+
+        chunk = 512
+        # Here is the destination array for the results
+        dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
+        df = np.arcsinh(vf)
+        # weight for asinh vs geometric mean metrics
+        w = np.minimum(np.exp(2 * (vf - 4)), 1000.)
+        if np.any(np.isinf(w)):
+            print('inf in w at', np.where(np.isinf(w)))
+        if np.any(np.isnan(w)):
+            print('nan in w at', np.where(np.isnan(w)))
+
+        h = np.hypot(1, vf)
+        for first in range(0, vn.shape[0], chunk):
+            last = min(first + chunk, vn.shape[0])
+            # Create rescaled cells, shape=(nS,nCells,nTargets,nFeatures)
+            vnS = self.s[:, np.newaxis, np.newaxis, np.newaxis] * vn[first:last, :]
+            dn = np.arcsinh(vnS)
+            tmp = w * np.log(2 * vnS) + dn
+            ####
+            if np.any(np.isinf(tmp)):
+                print("inf tmp at", np.where(np.isinf(tmp)))
+                print(np.any(np.isinf(w)),
+                      np.any(np.isinf(vnS)),
+                      np.any(np.isinf(dn)),
+                      np.any(vnS <= 0))
+            if np.any(np.isnan(tmp)):
+                print("nan tmp at", np.where(np.isnan(tmp)))
+                print(np.any(np.isnan(w)),
+                      np.any(np.isnan(vnS)),
+                      np.any(np.isnan(dn)),
+                      np.any(vnS <= 0))
+
+            dn = tmp / (1 + w)
+            d = (dn - df) * h
+            dsq0 = np.sum(d * d, axis=3)  # Sum distance over features
+            # Now add penalty for the scaling factor
+            dsq0 += self.sPenalty[:, np.newaxis, np.newaxis]
+            # Take minimum distance of all scaling factors
+            dsq[first:last, :] = np.min(dsq0, axis=0)
+
+        return dsq
+
+    def update(self, cells, fractions, features, errors):
+        if len(cells.shape) != 2:
+            raise ValueError('Metric cells is wrong dimension')
+        if len(fractions.shape) != 1 or fractions.shape[0] != cells.shape[0]:
+            raise ValueError('Metric fractions array is wrong shape')
+        if len(features.shape) > 1:
+            raise ValueError('Metric gradient only works for single feature vector')
+        if features.shape != errors.shape:
+            raise ValueError('Metric features and errors do not match')
+        if cells.shape[-1] != features.shape[-1]:
+            raise ValueError('Metric cells and features have mismatched no. of features')
+
+        # Write just an unscaled version first
+        vf = features / errors
+        vn = cells / errors
+
+        factor = np.maximum(1., vf) / vn
+        # Don't move if there's no information at all
+        lowSN = np.maximum(vn, vf) < 2.  # Arbitrary choice of lower limits here
+        factor[lowSN] = 1.
+
+        cells *= np.power(factor, fractions[:, np.newaxis])
+        return
+
+
+class LinearMetric:
+    """
+    Metric interface implementation for error-scaled Euclidean distances,
+    e.g. Gaussian probabilities.
     """
 
-    chi2_min = 1e100
-    cell_min = -1
-    # find index of minimal chi2
-    for c in range(w_dims):
-        chi2 = evaluate_chi2(x, ivar, w, n_dims, one_over_n_dims, index, cell=c, chi2_break=chi2_min, diag_ivar=diag_ivar)
-        if chi2 < chi2_min:
-            chi2_min = chi2
-            cell_min = c
+    def __init__(self, noise0=0, signalScale=None):
+        """Create a distance metric between scale-smeared cells and some features
+        noise0: when a move is requested, each dimension's move will be suppressed
+            by a factor noise^2/(noise0^2+noise^2) as a means of deweighting bad
+            measurements.
+        signalScale: if given, it should be an array over features giving range of
+            signals, and the move suppression for noise0 above will be
+            calculated using noise/signalScale in each feature dimension.
+        """
+        self.noise0 = noise0
+        if signalScale is None:
+            self.scale = None
+        else:
+            self.scale = np.array(signalScale)
+        return
 
-    if cell_min == -1:
-        print('No minimum cell found for object:', index)
-        print('flux is:', x[index])
-        print('ivar is:', ivar[index])
+    def __call__(self, cells, features, errors):
+        if len(cells.shape) != 2:
+            raise ValueError('Metric cells is wrong dimension')
+        if features.shape != errors.shape:
+            raise ValueError('Metric features and errors do not match')
+        if cells.shape[-1] != features.shape[-1]:
+            raise ValueError('Metric cells and features have mismatched no. of features')
+        if len(features.shape) == 1:
+            vf = (features / errors).reshape(1, features.shape[0])
+            ee = errors.reshape(1, features.shape[0])
+        elif len(features.shape) == 2:
+            vf = features / errors
+            ee = errors
+            # vf is S/N of the features, with shape (nTargets,nFeatures)
+        else:
+            raise ValueError('Metric features has invalid dimensions')
+        vn = cells[:, np.newaxis, :] / ee[np.newaxis, :, :]
+        # And vn is cell S/N with shape (nCells,nTargets, nFeatures)
 
-    return chi2_min, cell_min
+        # Simple Euclidean distance between error-scaled values:
+        d = vn - vf
+        return np.sum(d * d, axis=2)
 
-@numba.jit(nopython=True)
-def evaluate_chi2(x, ivar, w, n_dims, one_over_n_dims, index, cell, chi2_break=2e1000, diag_ivar=False):
-    """Get chi2. Break if chi2 is larger than chi2_break.
+    def update(self, cells, fractions, features, errors):
+        if len(cells.shape) != 2:
+            raise ValueError('Metric cells is wrong dimension')
+        if len(fractions.shape) != 1 or fractions.shape[0] != cells.shape[0]:
+            raise ValueError('Metric fractions array is wrong shape')
+        if len(features.shape) > 1:
+            raise ValueError('Metric gradient only works for single feature vector')
+        if features.shape != errors.shape:
+            raise ValueError('Metric features and errors do not match')
+        if cells.shape[-1] != features.shape[-1]:
+            raise ValueError('Metric cells and features have mismatched no. of features')
+
+        # The shift is just difference scaled by fractions and
+        # any suppression factor
+        shift = features - cells  # Shape is (nCells, nFeatures)
+        shift = shift * fractions[:, np.newaxis]
+        if self.noise0 > 0:
+            # Suppress moves in features with large errors
+            noise = np.array(errors)
+            if self.scale is not None:
+                # Rescale noise levels by signal level
+                noise /= self.scale
+            noise *= noise
+            factor = noise / ((self.noise0 * self.noise0) + noise)
+            shift *= factor
+
+        cells += shift
+        return
+
+
+def readCOSMOS():
+    """Function to read the COSMOS input files.
+    Returns arrays fluxes,errors,redshifts,counts giving for each unique object
+    its ugrizJHK fluxes, flux errors, Laigle redshift, number of Balrog counts,
+    and radec array.
     """
-    chi2 = 0.0
-    give_up = False
-    for i in range(n_dims):
-        chi2 += (x[index, i] - w[cell, i]) * (x[index, i] - w[cell, i]) * ivar[index, i, i] * one_over_n_dims
-        if chi2 > chi2_break:
-            # it only gets worse
-            give_up = True
-            break
-        if not diag_ivar:
-            # take advantage of symmetry
-            for i2 in range(i + 1, n_dims):
-                chi2 += 2 * (x[index, i] - w[cell, i]) * (x[index, i2] - w[cell, i2]) * ivar[index, i, i2] * one_over_n_dims
-                if chi2 > chi2_break:
-                    # it only gets worse
-                    give_up = True
-                    break
-        if give_up:
-            break
-    return chi2
+    # Read the master file.  Mag zeropoints are all 30.0
+    cosmos = pandas.read_hdf('cosmos.hdf5', 'fluxes')
 
-@numba.jit(nopython=True)
-def unravel_index(c, map_shape, cout):
-    ndim = len(map_shape)
-    ci = c + 0
-    for i in range(ndim - 1, 0 - 1, -1):
-        cj = ci % map_shape[i]
-        cout[i] = cj
-        ci -= cj
-        ci //= map_shape[i]
+    # Pull out numpy arrays for our quantities of interest
+    fluxes = np.vstack([cosmos['BDF_FLUX_DERED_U'],
+                        cosmos['BDF_FLUX_DERED_G'],
+                        cosmos['BDF_FLUX_DERED_R'],
+                        cosmos['BDF_FLUX_DERED_I'],
+                        cosmos['BDF_FLUX_DERED_Z'],
+                        cosmos['BDF_FLUX_DERED_J'],
+                        cosmos['BDF_FLUX_DERED_H'],
+                        cosmos['BDF_FLUX_DERED_K']]).transpose()
+    errors = np.vstack([cosmos['BDF_FLUX_ERR_DERED_U'],
+                        cosmos['BDF_FLUX_ERR_DERED_G'],
+                        cosmos['BDF_FLUX_ERR_DERED_R'],
+                        cosmos['BDF_FLUX_ERR_DERED_I'],
+                        cosmos['BDF_FLUX_ERR_DERED_Z'],
+                        cosmos['BDF_FLUX_ERR_DERED_J'],
+                        cosmos['BDF_FLUX_ERR_DERED_H'],
+                        cosmos['BDF_FLUX_ERR_DERED_K']]).transpose()
+    redshifts = np.array(cosmos['Z'])
+    radec = np.vstack([cosmos['RA'],
+                       cosmos['DEC']]).transpose()
+
+    # Reduce to the unique COSMOS objects, keep track of number of Balrog detections
+    junk, indices, counts = np.unique(fluxes[:, 0], return_index=True, return_counts=True)
+    fluxes = fluxes[indices]
+    errors = errors[indices]
+    redshifts = redshifts[indices]
+    radec = radec[indices]
+    return fluxes, errors, redshifts, counts, radec
+
+
+def somPlot3d(som, az=200., el=30.):
+    # Make a 3d plot of cells weights in color space.  az/el are plot view angle
+    mags = 30. - 2.5 * np.log10(som.weights)
+    ug = mags[:, 0] - mags[:, 1]
+    gi = mags[:, 1] - mags[:, 3]
+    ik = mags[:, 3] - mags[:, 7]
+    imag = mags[:, 3]
+    fig = pl.figure(figsize=(6, 6))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.azim = az
+    ax.elev = el
+    ax.scatter(gi, ik, imag, c=ug, cmap='Spectral_r')
+    # Draw the outline of the SOM edges
+    xx = np.arange(som.shape[0], dtype=int)
+    yy = np.arange(som.shape[1], dtype=int)
+    xxx = np.hstack((xx,
+                     np.ones(len(yy) - 2, dtype=int) * xx[-1],
+                     xx[::-1],
+                     np.zeros(len(yy) - 1, dtype=int)))
+    yyy = np.hstack((np.zeros(len(xx), dtype=int),
+                     yy[1:-1],
+                     np.ones(len(xx) - 1, dtype=int) * yy[-1],
+                     yy[-1::-1]))
+    ii = np.ravel_multi_index((xxx, yyy), som.shape)
+    ax.plot(gi[ii], ik[ii], imag[ii], 'k--')
+    ax.set_title('Node locations')
+    ax.set_aspect('equal')
+    ax.set_xlabel('gi')
+    ax.set_ylabel('ik')
+    ax.set_zlabel('imag')
+    return
+
+
+def somPlot2d(som):
+    # Make a 2d plot of cells weights in color-color diagram space.
+    mags = 30. - 2.5 * np.log10(som.weights)
+    ug = mags[:, 0] - mags[:, 1]
+    gi = mags[:, 1] - mags[:, 3]
+    ik = mags[:, 3] - mags[:, 7]
+    imag = mags[:, 3]
+    fig = pl.figure(figsize=(6, 7))
+    # First a color-color plot of nodes
+    pl.scatter(gi, ik, c=imag, alpha=0.3, cmap='Spectral')
+    # Draw the outline of the SOM edges
+    xx = np.arange(som.shape[0], dtype=int)
+    yy = np.arange(som.shape[1], dtype=int)
+    xxx = np.hstack((xx,
+                     np.ones(len(yy) - 2, dtype=int) * xx[-1],
+                     xx[::-1],
+                     np.zeros(len(yy) - 1, dtype=int)))
+    yyy = np.hstack((np.zeros(len(xx), dtype=int),
+                     yy[1:-1],
+                     np.ones(len(xx) - 1, dtype=int) * yy[-1],
+                     yy[-1::-1]))
+    ii = np.ravel_multi_index((xxx, yyy), som.shape)
+    pl.plot(gi[ii], ik[ii], 'k-')
+    pl.title('Node locations')
+    pl.gca().set_aspect('equal')
+    cb = pl.colorbar()
+    cb.set_label('imag')
+    pl.xlabel('gi')
+    pl.ylabel('ik')
+    return
+
+
+def somDomainColors(som):
+    # Make 4-panel plot colors and mag across SOM space
+    mags = 30. - 2.5 * np.log10(som.weights)
+    ug = mags[:, 0] - mags[:, 1]
+    gi = mags[:, 1] - mags[:, 3]
+    ik = mags[:, 3] - mags[:, 7]
+    imag = mags[:, 3]
+    fig = pl.figure(figsize=(6, 7))
+
+    fig, ax = pl.subplots(nrows=2, ncols=2, figsize=(8, 8))
+    im = ax[0, 0].imshow(gi.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[0, 0].set_title('gi')
+    ax[0, 0].set_aspect('equal')
+    pl.colorbar(im, ax=ax[0, 0])
+
+    im = ax[1, 0].imshow(ug.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[1, 0].set_title('ug')
+    ax[1, 0].set_aspect('equal')
+    pl.colorbar(im, ax=ax[1, 0])
+
+    im = ax[0, 1].imshow(ik.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[0, 1].set_title('ik')
+    ax[0, 1].set_aspect('equal')
+    pl.colorbar(im, ax=ax[0, 1])
+
+    im = ax[1, 1].imshow(imag.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral')
+    ax[1, 1].set_title('imag')
+    ax[1, 1].set_aspect('equal')
+    pl.colorbar(im, ax=ax[1, 1])
+    return
+
+
+def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):
+    """Make 4-panel plot showing occupancy of SOM by a redshift sample and statistics
+       of redshift distribution in each cell."""
+    nbins = np.prod(som.shape)
+    nn = np.histogram(cells, bins=nbins, range=(-0.5, nbins - 0.5))[0]
+    zmean = np.histogram(cells, bins=nbins, range=(-0.5, nbins - 0.5), weights=zz[::subsamp])[0] / nn
+    zvar = np.histogram(cells, bins=nbins, range=(-0.5, nbins - 0.5), weights=(zz * zz)[::subsamp])[0] / nn
+    zrms = np.sqrt(zvar - zmean * zmean)
+    zmed = np.array([np.median(zz[cells == i]) for i in range(nbins)])
+
+    fig, ax = pl.subplots(nrows=2, ncols=2, figsize=figsize)
+
+    im = ax[0, 0].imshow(np.log10(nn.reshape(som.shape)), interpolation='nearest', origin='lower')  # ,
+    # cmap=cmr.heat)
+    ax[0, 0].set_aspect('equal')
+    ax[0, 0].set_title('Sources per cell')
+    pl.colorbar(im, ax=ax[0, 0])
+
+    useful = nn > 4
+    im = ax[0, 1].imshow(zmed.reshape(som.shape), interpolation='nearest', origin='lower',
+                         vmax=2.5, vmin=0., cmap='Spectral')
+    ax[0, 1].set_aspect('equal')
+    ax[0, 1].set_title('z_median')
+    pl.colorbar(im, ax=ax[0, 1])
+
+    im = ax[1, 0].imshow((zrms / (1 + zmed)).reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral')
+    ax[1, 0].set_aspect('equal')
+    ax[1, 0].set_title('std(z)/(1+zmed)')
+    pl.colorbar(im, ax=ax[1, 0])
+
+    print('Median sig(ln(z)):', np.median((zrms / (1 + zmed))[useful]))
+
+    # make another plot showing rms of neighbor cells
+    tmp = zmed.reshape(som.shape)
+    tmp2 = np.stack((tmp[:-2, :-2],
+                     tmp[:-2, 1:-1],
+                     tmp[:-2, 2:],
+                     tmp[1:-1, :-2],
+                     tmp[1:-1, 1:-1],
+                     tmp[1:-1, 2:],
+                     tmp[2:, :-2],
+                     tmp[2:, 1:-1],
+                     tmp[2:, 2:]), axis=0)
+    grad = np.std(tmp2, axis=0) / tmp[1:-1, 1:-1] / 2.
+    print('Median neighbor sig(ln(z)):', np.median(grad[~np.isnan(grad)]))
+    tmp = (zrms / (1 + zmean)).reshape(som.shape)[1:-1, 1:-1] / grad
+    im = ax[1, 1].imshow(tmp, interpolation='nearest', origin='lower', cmap='Spectral', vmin=0, vmax=5)
+    ax[1, 1].set_aspect('equal')
+    ax[1, 1].set_title('stddev / local slope')
+    pl.colorbar(im, ax=ax[1, 1])
+
+    return
