@@ -598,6 +598,37 @@ def somPlot2d(som):
     return
 
 
+def somPlot2dnok(som):
+    # Make a 2d plot of cells weights in color-color diagram space.
+    mags = 30. - 2.5 * np.log10(som.weights)
+    ug = mags[:, 0] - mags[:, 1]
+    gi = mags[:, 1] - mags[:, 3]
+    iy = mags[:, 3] - mags[:, 5]
+    imag = mags[:, 3]
+    fig = pl.figure(figsize=(10, 8))
+    # First a color-color plot of nodes
+    pl.scatter(gi, iy, c=imag, alpha=0.3, cmap='Spectral')
+    # Draw the outline of the SOM edges
+    xx = np.arange(som.shape[0], dtype=int)
+    yy = np.arange(som.shape[1], dtype=int)
+    xxx = np.hstack((xx,
+                     np.ones(len(yy) - 2, dtype=int) * xx[-1],
+                     xx[::-1],
+                     np.zeros(len(yy) - 1, dtype=int)))
+    yyy = np.hstack((np.zeros(len(xx), dtype=int),
+                     yy[1:-1],
+                     np.ones(len(xx) - 1, dtype=int) * yy[-1],
+                     yy[-1::-1]))
+    ii = np.ravel_multi_index((xxx, yyy), som.shape)
+    pl.plot(gi[ii], iy[ii], 'k-')
+    pl.title('Node locations')
+    pl.gca().set_aspect('equal')
+    cb = pl.colorbar()
+    cb.set_label('imag')
+    pl.xlabel('gi')
+    pl.ylabel('iy')
+    return
+
 def somDomainColors(som):
     # Make 4-panel plot colors and mag across SOM space
     mags = 30. - 2.5 * np.log10(som.weights)
@@ -623,6 +654,41 @@ def somDomainColors(som):
     im = ax[0, 1].imshow(ik.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral_r')
     ax[0, 1].set_title('ik')
+    ax[0, 1].set_aspect('equal')
+    pl.colorbar(im, ax=ax[0, 1])
+
+    im = ax[1, 1].imshow(imag.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral')
+    ax[1, 1].set_title('imag')
+    ax[1, 1].set_aspect('equal')
+    pl.colorbar(im, ax=ax[1, 1])
+    return
+
+def somDomainColorsnok(som):
+    # Make 4-panel plot colors and mag across SOM space
+    mags = 30. - 2.5 * np.log10(som.weights)
+    ug = mags[:, 0] - mags[:, 1]
+    gi = mags[:, 1] - mags[:, 3]
+    iy = mags[:, 3] - mags[:, 5]
+    imag = mags[:, 3]
+    fig = pl.figure(figsize=(10, 9))
+
+    fig, ax = pl.subplots(nrows=2, ncols=2, figsize=(8, 8))
+    im = ax[0, 0].imshow(gi.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[0, 0].set_title('gi')
+    ax[0, 0].set_aspect('equal')
+    pl.colorbar(im, ax=ax[0, 0])
+
+    im = ax[1, 0].imshow(ug.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[1, 0].set_title('ug')
+    ax[1, 0].set_aspect('equal')
+    pl.colorbar(im, ax=ax[1, 0])
+
+    im = ax[0, 1].imshow(iy.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[0, 1].set_title('iy')
     ax[0, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[0, 1])
 
