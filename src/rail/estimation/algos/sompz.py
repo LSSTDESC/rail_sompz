@@ -49,10 +49,21 @@ class SOMPZInformer(CatInformer):
                           input_errs_wide=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for wide data"),
                           zero_points_deep=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for deep data, if needed"),
                           zero_points_wide=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for wide data, if needed"),
-                          convert_to_flux=Param(bool, True, msg="flag for whether to convert input columns to fluxes, set to true"
-                                                "if inputs are mags and to False if inputs are already fluxes"),
-                          set_threshold=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
-                          thresh_val=Param(float, 1.e-5, msg="threshold value for set_threshold"))
+                          som_shape_deep=Param(tuple, (32, 32), msg="shape for the deep som, must be a 2-element tuple"),
+                          som_shape_wide=Param(tuple, (32, 32), msg="shape for the wide som, must be a 2-element tuple"),
+                          som_minerror_deep=Param(float, 0.01, msg="floor placed on observational error on each feature in deep som"),
+                          som_minerror_wide=Param(float, 0.01, msg="floor placed on observational error on each feature in wide som"),
+                          som_wrap_deep=Param(bool, False, msg="flag to set whether the deep SOM has periodic boundary conditions"),
+                          som_wrap_wide=Param(bool, False, msg="flag to set whether the wide SOM has periodic boundary conditions"),
+                          som_take_log_deep=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for deep som"),
+                          som_take_log_wide=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for wide som"),
+                          convert_to_flux_deep=Param(bool, False, msg="flag for whether to convert input columns to fluxes for deep data"
+                                                     "set to true if inputs are mags and to False if inputs are already fluxes"),
+                          convert_to_flux_wide=Param(bool, False, msg="flag for whether to convert input columns to fluxes for wide data"),
+                          set_threshold_deep=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
+                          thresh_val_deep=Param(float, 1.e-5, msg="threshold value for set_threshold for deep data"),
+                          set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
+                          thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"))
 
     #inputs = [('input_spec_data', TableHandle),
     #          ('input_deep_data', TableHandle),
@@ -99,7 +110,7 @@ class SOMPZInformer(CatInformer):
 
         # assemble deep data
         for i, (col, errcol) in enumerate(zip(self.config.inputs_deep, self.config.input_errs_deep)):
-            if self.config.convert_to_flux:
+            if self.config.convert_to_flux_deep:
                 deep_input[:, i] = mag2flux(deep_data[col], self.config.zero_points_deep[i])
                 deep_errs[:, i] = magerr2fluxerr(deep_data[errcol], deep_input[:, i])
             else:
@@ -108,7 +119,7 @@ class SOMPZInformer(CatInformer):
 
         # assemble wide data
         for i, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
-            if self.config.convert_to_flux:
+            if self.config.convert_to_flux_wide:
                 wide_input[:, i] = mag2flux(wide_data[col], self.config.zero_points_deep[i])
                 wide_errs[:, i] = magerr2fluxerr(wide_data[errcol], wide_input[:, i])
             else:
@@ -117,22 +128,34 @@ class SOMPZInformer(CatInformer):
 
 
         # put a temporary threshold bit in fix this up later...
-        if self.config.set_threshold:
+        if self.config.set_threshold_deep:
             truncation_value = 1e-2
             for i in range(num_inputs_deep):
-                mask = (deep_input[:, i] < self.config.thresh_val)
+                mask = (deep_input[:, i] < self.config.thresh_val_deep)
                 deep_input[:, i][mask] = truncation_value
-                errmask = (deep_errs[:, i] < self.config.thresh_val)
+                errmask = (deep_errs[:, i] < self.config.thresh_val_deep)
                 deep_errs[:, i][errmask] = truncation_value
+
+        if self.config.set_threshold_wide:
+            truncation_value = 1e-2
+            for i in range(num_inputs_deep):
+                mask = (wide_input[:, i] < self.config.thresh_val_wide)
+                wide_input[:, i][mask] = truncation_value
+                errmask = (wide_errs[:, i] < self.config.thresh_val_wide)
+                wide_errs[:, i][errmask] = truncation_value
 
         sommetric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         learn_func = somfuncs.hFunc(ngal_deep, sigma=(30, 1))
 
-        print("Training deep SOM...")
-        deep_som = somfuncs.NoiseSOM(sommetric, deep_input, deep_errs, learn_func)
-        print("Training wide SOM...")
+        print(f"Training deep SOM of shape {self.config.som_shape_deep}...")
+        deep_som = somfuncs.NoiseSOM(sommetric, deep_input, deep_errs, learn_func,
+                                     shape=self.config.som_shape_deep, minError=self.config.som_minerror_deep,
+                                     wrap=self.config.som_wrap_deep, logF=self.config.som_take_log_deep)
+        print(f"Training wide SOM of shape {self.config.som_shape_wide}...")
         learn_func = somfuncs.hFunc(ngal_wide, sigma=(30,1))
-        wide_som = somfuncs.NoiseSOM(sommetric, wide_input, wide_errs, learn_func)
+        wide_som = somfuncs.NoiseSOM(sommetric, wide_input, wide_errs, learn_func,
+                                     shape=self.config.som_shape_wide, minError=self.config.som_minerror_wide,
+                                     wrap=self.config.som_wrap_wide, logF=self.config.som_take_log_wide)
 
         model = dict(deep_som=deep_som, wide_som=wide_som, deep_columns=self.config.inputs_deep,
                      deep_err_columns=self.config.input_errs_deep, wide_columns=self.config.inputs_wide,
