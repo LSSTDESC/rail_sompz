@@ -16,7 +16,6 @@ classifiers = [
 dynamic = ["version"]
 
 dependencies = [
-    "desc-sompz",
     "pz-rail-base",
     "qp-prob[full]",
 ]
