@@ -22,7 +22,6 @@ for band in def_bands:
     default_err_names.append(f"mag_err_{band}_lsst")
     default_zero_points.append(30.)
 
-
 def mag2flux(mag, zero_pt=30):
     # zeropoint: M = 30 <=> f = 1
     exponent = (mag - zero_pt) / (-2.5)
@@ -162,59 +161,8 @@ class SOMPZInformer(CatInformer):
                      wide_err_columns=self.config.input_errs_wide)
         self.model = model
 
-        """train SOMs
-        """
-        # TODO handle cfgfile io
-        # TODO define arguments
-        # TODO reconcile arguments given and expected
-        # TODO connect kwargs with config file
-        #with open(cfgfile, 'r') as fp:
-        #    cfg = yaml.safe_load(fp)
-
-        ## Read variables from config file
-        #output_path = cfg['out_dir']
-        #som_dim = cfg['deep_som_dim']
-        #input_deep_balrog_file = cfg['deep_balrog_file']
-        #bands = cfg['deep_bands']
-        #bands_label = cfg['deep_bands_label']
-        #bands_err_label = cfg['deep_bands_err_label']
-        
-        #deep_balrog_data = fitsio.read(input_deep_balrog_file) # reconcile with TableHandle
-
-        ## Create flux and flux_err vectors
-        #len_deep = len(deep_balrog_data[bands_label + bands[0]])
-        #fluxes_d = np.zeros((len_deep, len(bands)))
-        #fluxerrs_d = np.zeros((len_deep, len(bands)))
-
-        #for i, band in enumerate(bands):
-        #    print(i, band)
-        #    fluxes_d[:, i] = deep_balrog_data[bands_label + band]
-        #    fluxerrs_d[:, i] = deep_balrog_data[bands_err_label + band]
-
-        ## Train the SOM with this set (takes a few hours on laptop!)
-        #nTrain = fluxes_d.shape[0]
-
-        ## Scramble the order of the catalog for purposes of training
-        #indices = np.random.choice(fluxes_d.shape[0], size=nTrain, replace=False)
-
-        ## Some specifics of the SOM training
-        #hh = ns.hFunc(nTrain, sigma=(30, 1))
-        #metric = ns.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
-
-        ## Now training the SOM 
-        #deep_som = ns.NoiseSOM(metric, fluxes_d[indices, :], fluxerrs_d[indices, :],
-        #                       learning=hh,
-        #                       shape=(som_dim, som_dim),
-        #                       wrap=False, logF=True,
-        #                       initialize='sample',
-        #                       minError=0.02)
-        
-        #self.add_data('model_som_deep',  deep_som)
-        #self.add_data('model_som_wide',  deep_som)
         self.add_data('model', self.model)
 
-        # TAKE OUT SPECZ DATA FOR NOW, I DON'T KNOW IF IT'S ACTUALLY USED HERE!
-        #    def inform(self, input_spec_data, input_deep_data, input_wide_data):
     def inform(self, input_deep_data, input_wide_data):
         #self.add_data('input_spec_data', input_spec_data)
         self.set_data('input_deep_data', input_deep_data)
@@ -223,8 +171,6 @@ class SOMPZInformer(CatInformer):
         self.run()
         self.finalize()
 
-        #return dict(model_som_deep=self.get_handle('model_som_deep'),
-        #            model_som_wide=self.get_handle('model_som_wide'))
         return self.model
         
 class SOMPZEstimator(CatEstimator):
@@ -249,19 +195,27 @@ class SOMPZEstimator(CatEstimator):
             raise FileNotFoundError("SOMPZDATAPATH " + self.data_path + " does not exist! Check value of data_path in config file!")
 
         # check on bands, errs, and prior band
-        if len(self.config.bands) != len(self.config.err_bands):  # pragma: no cover
-            raise ValueError("Number of bands specified in bands must be equal to number of mag errors specified in err_bands!")
-        if self.config.ref_band not in self.config.bands:  # pragma: no cover
-            raise ValueError(f"reference band not found in bands specified in bands: {str(self.config.bands)}")
+        if len(self.config.deep_bands) != len(self.config.err_deep_bands):  # pragma: no cover
+            raise ValueError("Number of deep_bands specified in deep_bands must be equal to number of mag errors specified in err_deep_bands!")
+        if self.config.ref_band_deep not in self.config.deep_bands:  # pragma: no cover
+            raise ValueError(f"reference band not found in deep_bands specified in deep_bands: {str(self.config.deep_bands)}")
+
+        if len(self.config.wide_bands) != len(self.config.err_wide_bands):  # pragma: no cover
+            raise ValueError("Number of wide_bands specified in wide_bands must be equal to number of mag errors specified in err_wide_bands!")
+        if self.config.ref_band_wide not in self.config.wide_bands:  # pragma: no cover
+            raise ValueError(f"reference band not found in wide_bands specified in wide_bands: {str(self.config.wide_bands)}")
+
+        self.model = None
 
     def _estimate_pdf(self, flux, flux_err):
         # TODO: compute p(z|c), redshift distributions in deep SOM cells
-
+        pz_c = None
+        print('hello, _estimate_pdf')
         # TODO: compute p(c|chat), transfer function
-        # relating deep SOM cells c to wide SOM cells chat
-        cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
+        #cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
 
         # TODO: compute p(chat), occupation in wide SOM cells
+
         # TODO: compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
         # TODO: construct tomographic bins bhat = {chat}
         # TODO: compute p(z|bhat) \propto sum_chat p(z|chat)
@@ -274,3 +228,19 @@ class SOMPZEstimator(CatEstimator):
         Run SOMPZ on a chunk of data
         """
         #TODO
+
+    def run(self):
+        print('hello, run')
+        self.open_model(**self.config)
+        print(self.model)
+
+
+    def estimate(self, ): # input_deep_data, input_wide_data
+        #self.add_data('input_spec_data', input_spec_data)
+        #input_deep_data = self.model.get_data('input_deep_data')
+        #input_wide_data = self.model.get_data('input_wide_data')
+        
+        self.run()
+        #self.finalize()
+
+        return #self.model
