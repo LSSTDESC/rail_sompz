@@ -1,7 +1,7 @@
 """
 Port of SOMPZ
 """
-
+import pdb
 import os
 import numpy as np
 import sys
@@ -81,8 +81,6 @@ class SOMPZInformer(CatInformer):
         """Init function, init config stuff
         """
         CatInformer.__init__(self, args, comm=comm)
-        self.deep_model = None
-        self.wide_model = None
 
     def run(self):
 
@@ -92,7 +90,7 @@ class SOMPZInformer(CatInformer):
         else:  # pragma: no cover
         # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             deep_data = self.get_data('input_deep_data')
-        wide_data = self.get_data('input_wide_data')[self.config.wide_groupname]
+        wide_data = self.get_data('input_wide_data')#[self.config.wide_groupname]
         # spec_data = self.get_data('input_spec_data')
 
         num_inputs_deep = len(self.config.inputs_deep)
@@ -126,7 +124,7 @@ class SOMPZInformer(CatInformer):
                 wide_errs[:, i] = wide_data[errcol]
 
 
-        # put a temporary threshold bit in fix this up later...
+        # put a temporary threshold bit in. TODO fix this up later...
         if self.config.set_threshold_deep:
             truncation_value = 1e-2
             for i in range(num_inputs_deep):
@@ -137,7 +135,7 @@ class SOMPZInformer(CatInformer):
 
         if self.config.set_threshold_wide:
             truncation_value = 1e-2
-            for i in range(num_inputs_deep):
+            for i in range(num_inputs_wide):
                 mask = (wide_input[:, i] < self.config.thresh_val_wide)
                 wide_input[:, i][mask] = truncation_value
                 errmask = (wide_errs[:, i] < self.config.thresh_val_wide)
@@ -205,23 +203,55 @@ class SOMPZEstimator(CatEstimator):
         if self.config.ref_band_wide not in self.config.wide_bands:  # pragma: no cover
             raise ValueError(f"reference band not found in wide_bands specified in wide_bands: {str(self.config.wide_bands)}")
 
-        self.model = None
+        self.model = self.open_model(**self.config) # None
+        print('initialized model', self.model)
 
-    def _estimate_pdf(self, flux, flux_err):
+    def _assign_som(self, flux, flux_err, som):
+        som_dim = 32 # TODO make kwarg
+        output_path = './' # TODO make kwarg
+        nTrain = flux.shape[0]
+        #som_weights = np.load(infile_som, allow_pickle=True)
+        som_weights = self.model[som + '_som'].weights
+        hh = somfuncs.hFunc(nTrain, sigma=(30, 1))
+        metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
+        som = somfuncs.NoiseSOM(metric, None, None,
+                          learning=hh,
+                          shape=(som_dim, som_dim),
+                          wrap=False, logF=True,
+                          initialize=som_weights,
+                          minError=0.02)
+        subsamp = 1
+
+        # Now we classify the objects into cells and save these cells
+        print(flux.shape)
+        print(flux_err.shape)
+        cells_test, dist_test = som.classify(flux[::subsamp, :], flux_err[::subsamp, :])
+        np.savez("%s/som_deep_64x64_assign.npz" % output_path, cells=cells_test, dist=dist_test)
+
+        return cells_test, dist_test
+    
+    def _estimate_pdf(self,):
+        pdb.set_trace()
         # TODO: compute p(z|c), redshift distributions in deep SOM cells
         pz_c = None
         print('hello, _estimate_pdf')
+
+
         # TODO: compute p(c|chat), transfer function
         #cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
-
+        pc_chat = None
+        
         # TODO: compute p(chat), occupation in wide SOM cells
-
+        pchat = None
+        
         # TODO: compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
-        # TODO: construct tomographic bins bhat = {chat}
-        # TODO: compute p(z|bhat) \propto sum_chat p(z|chat)
+        pz_chat = None
 
-
-        return
+        model_update = dict(pz_c=pz_c, pc_chat=pcchat, pchat=pchat,
+                            pz_chat=pz_chat)
+        self.model = self.model.update(model_update)
+        
+        return pz_c, pc_chat, pchat, pz_chat
 
     def _process_chunk(self, start, end, data, first):
         """
@@ -229,18 +259,45 @@ class SOMPZEstimator(CatEstimator):
         """
         #TODO
 
-    def run(self):
+    def run(self,
+            flux_deep, flux_err_deep,
+            flux_wide, flux_err_wide):
         print('hello, run')
-        self.open_model(**self.config)
-        print(self.model)
+        ### assign samples to SOMs
 
+        if 'cells_deep' in self.model and 'dist_deep' in self.model:
+            cells_deep, dist_deep = self.model['cells_deep'], self.model['dist_deep']
+        else:
+            cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
 
-    def estimate(self, ): # input_deep_data, input_wide_data
+        if 'cells_wide' in self.model and 'dist_wide' in self.model:
+            cells_wide, dist_wide = self.model['cells_wide'], self.model['dist_wide']
+        else:
+            cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
+
+        model_update = dict(cells_deep=cells_deep, dist_deep=dist_deep,
+                            cells_wide=cells_wide, dist_wide=dist_wide)
+        self.model = self.model.update(model_update)
+        self.add_data('model', self.model) # is this necessary?
+        
+        pz_c, pc_chat, pchat, pz_chat = self._estimate_pdf()
+
+        # TODO: construct tomographic bins bhat = {chat}
+        # TODO: compute p(z|bhat) \propto sum_chat p(z|chat)
+
+    def estimate(self,
+                 input_deep_data,
+                 input_deep_err,
+                 input_wide_data,
+                 input_wide_err,):
         #self.add_data('input_spec_data', input_spec_data)
         #input_deep_data = self.model.get_data('input_deep_data')
         #input_wide_data = self.model.get_data('input_wide_data')
         
-        self.run()
-        #self.finalize()
+        self.run(input_deep_data,
+                 input_deep_err,
+                 input_wide_data,
+                 input_wide_err,)
+        self.finalize()
 
         return #self.model
