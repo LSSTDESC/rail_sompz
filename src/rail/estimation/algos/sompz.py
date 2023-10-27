@@ -176,6 +176,31 @@ class SOMPZEstimator(CatEstimator):
     """
     name = "SOMPZEstimator"
     config_options = CatEstimator.config_options.copy()
+    config_options.update(redshift_col=SHARED_PARAMS,
+                          deep_groupname=Param(str, "photometry", msg="hdf5_groupname for deep data"),
+                          wide_groupname=Param(str, "photometry", msg="hdf5_groupname for wide data"),
+                          inputs_deep=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
+                          input_errs_deep=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for deep data"),
+                          inputs_wide=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for wide data"),
+                          input_errs_wide=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for wide data"),
+                          zero_points_deep=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for deep data, if needed"),
+                          zero_points_wide=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for wide data, if needed"),
+                          som_shape_deep=Param(tuple, (32, 32), msg="shape for the deep som, must be a 2-element tuple"),
+                          som_shape_wide=Param(tuple, (32, 32), msg="shape for the wide som, must be a 2-element tuple"),
+                          som_minerror_deep=Param(float, 0.01, msg="floor placed on observational error on each feature in deep som"),
+                          som_minerror_wide=Param(float, 0.01, msg="floor placed on observational error on each feature in wide som"),
+                          som_wrap_deep=Param(bool, False, msg="flag to set whether the deep SOM has periodic boundary conditions"),
+                          som_wrap_wide=Param(bool, False, msg="flag to set whether the wide SOM has periodic boundary conditions"),
+                          som_take_log_deep=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for deep som"),
+                          som_take_log_wide=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for wide som"),
+                          convert_to_flux_deep=Param(bool, False, msg="flag for whether to convert input columns to fluxes for deep data"
+                                                     "set to true if inputs are mags and to False if inputs are already fluxes"),
+                          convert_to_flux_wide=Param(bool, False, msg="flag for whether to convert input columns to fluxes for wide data"),
+                          set_threshold_deep=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
+                          thresh_val_deep=Param(float, 1.e-5, msg="threshold value for set_threshold for deep data"),
+                          set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
+                          thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"))
+    
     def __init__(self, args, comm=None):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
         """
@@ -207,7 +232,11 @@ class SOMPZEstimator(CatEstimator):
         print('initialized model', self.model)
 
     def _assign_som(self, flux, flux_err, som):
-        som_dim = 32 # TODO make kwarg
+        if som == 'deep':
+            som_dim = self.config.som_shape_deep[0]
+        elif som == 'wide':
+            som_dim = self.config.som_shape_wide[0]
+            
         output_path = './' # TODO make kwarg
         nTrain = flux.shape[0]
         #som_weights = np.load(infile_som, allow_pickle=True)
