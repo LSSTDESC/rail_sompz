@@ -231,16 +231,16 @@ class SOMPZEstimator(CatEstimator):
         self.model = self.open_model(**self.config) # None
         print('initialized model', self.model)
 
-    def _assign_som(self, flux, flux_err, som):
-        if som == 'deep':
+    def _assign_som(self, flux, flux_err, somstr):
+        if somstr == 'deep':
             som_dim = self.config.som_shape_deep[0]
-        elif som == 'wide':
+        elif somstr == 'wide':
             som_dim = self.config.som_shape_wide[0]
             
         output_path = './' # TODO make kwarg
         nTrain = flux.shape[0]
         #som_weights = np.load(infile_som, allow_pickle=True)
-        som_weights = self.model[som + '_som'].weights
+        som_weights = self.model[somstr + '_som'].weights
         hh = somfuncs.hFunc(nTrain, sigma=(30, 1))
         metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         som = somfuncs.NoiseSOM(metric, None, None,
@@ -252,10 +252,9 @@ class SOMPZEstimator(CatEstimator):
         subsamp = 1
 
         # Now we classify the objects into cells and save these cells
-        print(flux.shape)
-        print(flux_err.shape)
         cells_test, dist_test = som.classify(flux[::subsamp, :], flux_err[::subsamp, :])
-        np.savez("%s/som_deep_64x64_assign.npz" % output_path, cells=cells_test, dist=dist_test)
+        outfile = os.path.join(output_path, "som_{0}_{1}x{1}_assign.npz".format(somstr,som_dim))
+        np.savez(outfile, cells=cells_test, dist=dist_test)
 
         return cells_test, dist_test
     
@@ -291,9 +290,7 @@ class SOMPZEstimator(CatEstimator):
     def run(self,
             flux_deep, flux_err_deep,
             flux_wide, flux_err_wide):
-        print('hello, run')
         ### assign samples to SOMs
-
         if 'cells_deep' in self.model and 'dist_deep' in self.model:
             cells_deep, dist_deep = self.model['cells_deep'], self.model['dist_deep']
         else:
@@ -304,10 +301,14 @@ class SOMPZEstimator(CatEstimator):
         else:
             cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
+        ### save cells_deep, dist_deep, cells_wide, dist_wide to self
         model_update = dict(cells_deep=cells_deep, dist_deep=dist_deep,
                             cells_wide=cells_wide, dist_wide=dist_wide)
         self.model = self.model.update(model_update)
         self.add_data('model', self.model) # is this necessary?
+
+        ### save cells_deep, dist_deep, cells_wide, dist_wide to disk
+        
         
         pz_c, pc_chat, pchat, pz_chat = self._estimate_pdf()
 
