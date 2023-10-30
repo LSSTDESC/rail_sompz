@@ -12,6 +12,9 @@ from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
 from rail.core.common_params import SHARED_PARAMS
 
+import astropy.io.fits as fits # TODO handle file i/o with rail
+import pandas as pd
+import matplotlib.pyplot as plt
 
 def_bands = ["u", "g", "r", "i", "z", "y"]
 default_input_names = []
@@ -33,6 +36,316 @@ def magerr2fluxerr(magerr, flux):
     coef = np.log(10) / -2.5
     return np.abs(coef * magerr * flux)
 
+def calculate_pcchat(deep_som_size, wide_som_size, cell_deep_assign, cell_wide_assign, overlap_weight):
+    pcchat_num = np.zeros((deep_som_size, wide_som_size))
+    np.add.at(pcchat_num,
+              (cell_deep_assign, cell_wide_assign),
+              overlap_weight)
+
+    pcchat_denom = pcchat_num.sum(axis=0)
+    pcchat = pcchat_num / pcchat_denom[None]
+
+    # any nonfinite in pcchat are to be treated as 0 probabilty
+    pcchat = np.where(np.isfinite(pcchat), pcchat, 0)
+
+    return pcchat
+
+def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins, overlap_key='overlap_weight',
+                        deep_som_size=64 * 64, deep_map_shape=(64 * 64,), interpolate_kwargs={}):
+    """Return individual deep histograms for each cell. Can interpolate for empty cells.
+
+    Parameters
+    ----------
+    deep_data             : cosmos data used here for Y3
+    key                   : Parameter to extract from dataframe
+    cells                 : A list of deep cells to return sample from, or a single int.
+    overlap_weighted_pzc  : Use overlap_weights in p(z|c) histogram if True. Also required if you want to bin conditionalize
+    overlap_key           : column name for the overlap weights in the dataframe, default to 'overlap_weight'
+    bins                  : Bins we histogram the values into
+    interpolate_kwargs    : arguments to pass in for performing interpolation between cells for redshift hists using a 2d gaussian of sigma scale_length out to max_length cells away.
+    The two kwargs are    : 'scale_length' and 'max_length'
+    Returns
+    -------
+    hists : a histogram of the values from self.data[key] for each deep cell
+    """
+
+    if len(interpolate_kwargs) > 0:
+        cells_keep = cells
+        cells = np.arange(deep_som_size)
+    else:
+        cells_keep = cells
+
+    hists = []
+    missing_cells = []
+    populated_cells = []
+    for ci, c in enumerate(cells):
+        try:
+            df = deep_data.groupby('cell_deep').get_group(c)
+            if type(key) is str:
+                z = df[key].values
+                if overlap_weighted_pzc:
+                    # print("WARNING: You are using a deprecated point estimate Z. No overlap weighting enabled.
+                    # You're on your own now.")#suppress
+                    weights = df[overlap_key].values
+                else:
+                    weights = np.ones(len(z))
+                hist = np.histogram(z, bins, weights=weights, density=True)[
+                    0]  # make weighted histogram by overlap weights
+                populated_cells.append([ci, c])
+            elif type(key) is list:
+                # use full p(z)
+                assert (bins is not None)
+                hist = histogram_from_fullpz(df, key, overlap_weighted=overlap_weighted_pzc, bin_edges=bins)
+            hists.append(hist)
+        except KeyError as e:
+            missing_cells.append([ci, c])
+            hists.append(np.zeros(len(bins) - 1))
+    hists = np.array(hists)
+
+    if len(interpolate_kwargs) > 0:
+        # print('Interpolating {0} missing histograms'.format(len(missing_cells)))
+        missing_cells = np.array(missing_cells)
+        populated_cells = np.array(populated_cells)
+        hist_conds = np.isin(cells, populated_cells[:, 1]) & np.all(np.isfinite(hists), axis=1)
+        for ci, c in missing_cells:
+            if c not in cells_keep:
+                # don't worry about interpolating cells we won't use anyways
+                continue
+
+            central_index = np.zeros(len(deep_map_shape), dtype=int)
+            # unravel_index(c, deep_map_shape, central_index)  # fills central_index
+            cND = np.zeros(len(deep_map_shape), dtype=int)
+            weight_map = np.zeros(deep_som_size)
+            # gaussian_rbf(weight_map, central_index, cND, deep_map_shape, **interpolate_kwargs)  # fills weight_map
+            hists[ci] = np.sum(hists[hist_conds] * (weight_map[hist_conds] / weight_map[hist_conds].sum())[:, None],
+                               axis=0)
+
+        # purge hists back to the ones we care about
+        hists = hists[cells_keep]
+
+    return hists
+
+def histogram(data, deep_data, key, cells, cell_weights, pcchat, overlap_weighted_pzc, deep_som_size=64 * 64, bins=None,
+              individual_chat=False, interpolate_kwargs={}):
+    """Return histogram from values that live in specified wide cells by querying deep cells that contribute
+
+    Parameters
+    ----------
+    key                  : Parameter(s) to extract from dataframe
+    cells                : A list of wide cells to return sample from, or a single int.
+    cell_weights         : How much we weight each wide cell. This is the array p(chat | sample)
+    overlap_weighted_pzc : Weight contribution of galaxies within c by overlap_weight, if True. Weighting for p(c|chat) is done using stored transfer matrix.
+    bins                 : Bins we histogram the values into
+    individual_chat      : If True, compute p(z|chat) for each individual cell in cells. If False, compute a single p(z|{chat}) for all cells.
+    interpolate_kwargs   : arguments to pass in for performing interpolation between cells for redshift hists using a 2d gaussian of sigma scale_length out to max_length cells away. The two kwargs are: 'scale_length' and 'max_length'
+
+    Returns
+    -------
+    hist : a histogram of the values from self.data[key]
+
+    Notes
+    -----
+    This method tries to marginalize wide assignments into what deep assignments it has
+
+    """
+    # get sample, p(z|c)
+    all_cells = np.arange(deep_som_size)
+    hists_deep = get_deep_histograms(data, deep_data, key=key, cells=all_cells,
+                                     overlap_weighted_pzc=overlap_weighted_pzc,
+                                     bins=bins, interpolate_kwargs=interpolate_kwargs)
+    if individual_chat:  # then compute p(z|chat) for each individual cell in cells and return histograms
+        hists = []
+        for i, (cell, cell_weight) in enumerate(zip(cells, cell_weights)):
+            # p(c|chat,s)p(chat|s) = p(c,chat|s)
+            possible_weights = pcchat[:, [cell]] * np.array([cell_weight])[None]  # (n_deep_cells, 1)
+            # sum_chat p(c,chat|s) = p(c|s)
+            weights = np.sum(possible_weights, axis=-1)
+            conds = (weights != 0) & np.all(np.isfinite(hists_deep), axis=1)
+            # sum_c p(z|c) p(c|s) = p(z|s)
+            hist = np.sum((hists_deep[conds] * weights[conds, None]), axis=0)
+
+            dx = np.diff(bins)
+            normalization = np.sum(dx * hist)
+            if normalization != 0:
+                hist = hist / normalization
+            hists.append(hist)
+        return hists
+    else:  # compute p(z|{chat}) and return histogram
+        # p(c|chat,s)p(chat|s) = p(c,chat|s)
+        possible_weights = pcchat[:, cells] * cell_weights[None]  # (n_deep_cells, n_cells)
+        # sum_chat p(c,chat|s) = p(c|s)
+        weights = np.sum(possible_weights, axis=-1)
+        conds = (weights != 0) & np.all(np.isfinite(hists_deep), axis=1)
+        # sum_c p(z|c) p(c|s) = p(z|s)
+        hist = np.sum((hists_deep[conds] * weights[conds, None]), axis=0)
+
+        dx = np.diff(bins)
+        normalization = np.sum(dx * hist)
+        if normalization != 0:
+            hist = hist / normalization
+        return hist
+
+def redshift_distributions_wide(data,
+                                deep_data,
+                                overlap_weighted_pchat,
+                                overlap_weighted_pzc,
+                                bins,
+                                pcchat,
+                                deep_som_size=64*64,
+                                tomo_bins={},
+                                key='Z',
+                                force_assignment=True,
+                                interpolate_kwargs={}, **kwargs):
+    """Returns redshift distribution for sample
+
+    Parameters
+    ----------
+    data :  Data sample of interest with wide data
+    deep_data: cosmos data
+    overlap_weighted_pchat  : If True, use overlap weights for p(chat)
+    overlap_weighted_pzc : If True, use overlap weights for p(z|c)
+                Note that whether p(c|chat) is overlap weighted depends on how you built pcchat earlier.
+    bins :      bin edges for redshift distributions data[key]
+    tomo_bins : Which cells belong to which tomographic bins. First column is
+                cell id, second column is an additional reweighting of galaxies in cell.
+                If nothing is passed in, then we by default just use all cells
+    key :       redshift key
+    force_assignment : Calculate cell assignments. If False, then will use whatever value is in the cell_key field of data. Default: True
+    interpolate_kwargs : arguments to pass in for performing interpolation
+    between cells for redshift hists using a 2d gaussian of sigma
+    scale_length out to max_length cells away. The two kwargs are:
+    'scale_length' and 'max_length'
+
+    Returns
+    -------
+    hists : Either a single array (if no tomo_bins) or multiple arrays
+
+    """
+    if len(tomo_bins) == 0:
+        cells, cell_weights = get_cell_weights_wide(data, overlap_weighted_pchat=overlap_weighted_pchat,
+                                                    force_assignment=force_assignment, **kwargs)
+        if cells.size == 0:
+            hist = np.zeros(len(bins) - 1)
+        else:
+            hist = histogram(data, deep_data, key=key, cells=cells, cell_weights=cell_weights,
+                             overlap_weighted_pzc=overlap_weighted_pzc, bins=bins,
+                             interpolate_kwargs=interpolate_kwargs)
+        return hist
+    else:
+        cells, cell_weights = get_cell_weights_wide(data, overlap_weighted_pchat,
+                                                    force_assignment=force_assignment, **kwargs)
+        cellsort = np.argsort(cells)
+        cells = cells[cellsort]
+        cell_weights = cell_weights[cellsort]
+
+        # break up hists into the different bins
+        hists = []
+        for tomo_key in tomo_bins:
+            cells_use = tomo_bins[tomo_key][:, 0]
+            cells_binweights = tomo_bins[tomo_key][:, 1]
+            cells_conds = np.searchsorted(cells, cells_use, side='left')
+            if len(cells_conds) == 0:
+                hist = np.zeros(len(bins) - 1)
+            else:
+                hist = histogram(data, deep_data, key=key, cells=cells[cells_conds],
+                                 cell_weights=cell_weights[cells_conds] * cells_binweights,
+                                 pcchat=pcchat,
+                                 deep_som_size=deep_som_size,
+                                 overlap_weighted_pzc=overlap_weighted_pzc,
+                                 bins=bins,
+                                 interpolate_kwargs=interpolate_kwargs)
+            hists.append(hist)
+        hists = np.array(hists)
+        return hists
+
+def get_cell_weights(data, overlap_weighted, key):
+    """Given data, get cell weights and indices
+
+    Parameters
+    ----------
+    data :  Dataframe we extract parameters from
+    overlap_weighted : If True, use mean overlap weights of cells.
+    key :   Which key we are grabbing
+
+    Returns
+    -------
+    cells :         The names of the cells
+    cell_weights :  The fractions of the cells
+    """
+    if overlap_weighted:
+        cws = data.groupby(key)['overlap_weight'].sum()
+    else:
+        cws = data.groupby(key).size()
+
+    cells = cws.index.values.astype(int)
+    cws = cws / cws.sum()
+
+    cell_weights = cws.values
+    return cells, cell_weights
+
+
+def get_cell_weights_wide(data, overlap_weighted_pchat, cell_key='cell_wide', force_assignment=False, **kwargs):
+    """Given data, get cell weights p(chat) and indices from wide SOM
+
+    Parameters
+    ----------
+    data             : Dataframe we extract parameters from
+    overlap_weighted_pchat : If True, use mean overlap weights of wide cells in p(chat)
+    cell_key         : Which key we are grabbing. Default: cell_wide
+    force_assignment : Calculate cell assignments. If False, then will use whatever value is in the cell_key field of data. Default: True
+
+    Returns
+    -------
+    cells        :  The names of the cells
+    cell_weights :  The fractions of the cells
+    """
+    # if force_assignment:
+    #     data[cell_key] = self.assign_wide(data, **kwargs)
+    return get_cell_weights(data, overlap_weighted_pchat, cell_key)
+
+def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
+                        key_z='Z', key_cells_wide='cell_wide_unsheared'):
+    # assign gals in redshift sample to bins
+    spec_data['tomo_bin'] = pd.cut(spec_data[key_z], bin_edges, labels=[0, 1, 2, 3])
+
+    ncells_with_spec_data = len(np.unique(spec_data[key_cells_wide].values))
+    cell_bin_assignment = np.ones(wide_som_size, dtype=int) * -1
+    cells_with_spec_data = np.unique(spec_data[key_cells_wide].values)
+
+    groupby_obj_value_counts = spec_data.groupby(key_cells_wide)['tomo_bin'].value_counts()
+
+    for c in cells_with_spec_data:
+        bin_assignment = groupby_obj_value_counts.loc[c].index[0]
+        cell_bin_assignment[c] = bin_assignment
+
+    # reformat bins into dict
+    tomo_bins_wide = {}
+    for i in range(4):
+        tomo_bins_wide[i] = np.where(cell_bin_assignment == i)[0]
+
+    return tomo_bins_wide
+
+def tomo_bins_wide_2d(tomo_bins_wide_dict):
+    tomo_bins_wide = tomo_bins_wide_dict.copy()
+    for k in tomo_bins_wide:
+        if tomo_bins_wide[k].ndim == 1:
+            tomo_bins_wide[k] = np.column_stack((tomo_bins_wide[k], np.ones(len(tomo_bins_wide[k]))))
+        renorm = 1. / np.average(tomo_bins_wide[k][:, 1])
+        tomo_bins_wide[k][:, 1] *= renorm  # renormalize so the mean weight is 1; important for bin conditioning
+    return tomo_bins_wide
+
+def plot_nz(hists, zbins, outfile, xlimits=(0, 2), ylimits=(0, 3.25)):
+    plt.figure(figsize=(16., 9.))
+    for i in range(len(hists)):
+        plt.plot((zbins[1:] + zbins[:-1]) / 2., hists[i], label='bin ' + str(i))
+    plt.xlim(xlimits)
+    plt.ylim(ylimits)
+    plt.xlabel(r'$z$')
+    plt.ylabel(r'$p(z)$')
+    plt.legend()
+    plt.title('n(z)')
+    plt.savefig(outfile)
+    plt.close()
 
 class SOMPZInformer(CatInformer):
     """Inform stage for SOMPZEstimator
@@ -200,6 +513,7 @@ class SOMPZEstimator(CatEstimator):
                           thresh_val_deep=Param(float, 1.e-5, msg="threshold value for set_threshold for deep data"),
                           set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
                           thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"))
+    #outputs = [('nz', PqHandle)]
     
     def __init__(self, args, comm=None):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
@@ -258,28 +572,109 @@ class SOMPZEstimator(CatEstimator):
 
         return cells_test, dist_test
     
-    def _estimate_pdf(self,):
-        pdb.set_trace()
-        # TODO: compute p(z|c), redshift distributions in deep SOM cells
-        pz_c = None
-        print('hello, _estimate_pdf')
+    def _estimate_pdf(self, spec_data, balrog_data, wide_data):
+        # TODO: read this stuff from cfg
+        zbins_dz  = 0.01
+        zbins_max = 6.00
+        zbins  = np.arange(-zbins_dz/2.,zbins_max+zbins_dz,zbins_dz)
+        # TODO: improve file i/o
+        output_path = './'
+        infile_spec_data = os.path.join(output_path, 'spec_data_incl_cells.h5')
+        spec_data = pd.read_hdf(infile_spec_data, key='spec_data')
+        #spec_data = fits.open(infile_spec_data)[1].data
 
+        infile_balrog_data = os.path.join(output_path, 'balrog_data_incl_cells.h5')
+        balrog_data = pd.read_hdf(infile_balrog_data, key='balrog_data')
+        #balrog_data = fits.open(infile_balrog_data)[1].data
+
+        infile_wide_data = os.path.join(output_path, 'wide_data_incl_cells.h5')
+        #wide_data = fits.open(infile_wide_data)[1].data
+        wide_data = pd.read_hdf(infile_wide_data, key='wide_data')
+        
+        # TODO: compute p(z|c), redshift distributions in deep SOM cells
+        deep_som_size = np.product(self.model['deep_som'].shape)
+        wide_som_size = np.product(self.model['wide_som'].shape)
+        
+        all_deep_cells = np.arange(deep_som_size)
+        key = 'specz_redshift'
+        pz_c = np.array(get_deep_histograms(wide_data,
+                                            spec_data,
+                                            key=key,
+                                            cells=all_deep_cells,
+                                            overlap_weighted_pzc=False,
+                                            bins=zbins))
+        np.savez(output_path + 'pzc.npy', pz_c=pz_c)
 
         # TODO: compute p(c|chat), transfer function
         #cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
-        pc_chat = None
+        pc_chat = calculate_pcchat(deep_som_size,
+                                   wide_som_size,
+                                   balrog_data['cell_deep'],#.values,
+                                   balrog_data['cell_wide'],#.values,       
+                                   np.ones(len(balrog_data)))#balrog_data['overlap_weight'].values)
+        outfile = os.path.join(output_path, 'pcchat.npy')
+        np.savez(outfile, pc_chat=pc_chat)
+
         
         # TODO: compute p(chat), occupation in wide SOM cells
-        pchat = None
+        
+
+        all_wide_cells = np.arange(wide_som_size)
+
+        pz_chat = np.array(histogram(wide_data,
+                                     spec_data,
+                                     key=key,
+                                     pcchat = pc_chat,
+                                     cells=all_wide_cells, 
+                                     cell_weights=np.ones(len(all_wide_cells)),
+                                     deep_som_size=deep_som_size,
+                                     overlap_weighted_pzc=False,
+                                     bins=zbins, 
+                                     individual_chat=True))
+        outfile = os.path.join(output_path, 'pzchat.npy')
+        np.savez(outfile, pz_chat=pz_chat)
         
         # TODO: compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
-        pz_chat = None
+        # assign sample to tomographic bins
+        bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # TODO make this a config input
+        n_bins = len(bin_edges) - 1
+        tomo_bins_wide_dict = bin_assignment_spec(spec_data,
+                                                  deep_som_size,
+                                                  wide_som_size,
+                                                  bin_edges = bin_edges,
+                                                  key_z = key,
+                                                  key_cells_wide='cell_wide')
 
-        model_update = dict(pz_c=pz_c, pc_chat=pcchat, pchat=pchat,
+        cell_occupation_info = wide_data.groupby('cell_wide')['cell_wide'].count()
+        bin_occupation_info = {'bin' + str(i) : np.sum(cell_occupation_info.loc[tomo_bins_wide_dict[i]].values) for i in range(n_bins)}
+        print(bin_occupation_info)
+
+        tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
+        # calculate n(z)
+        nz = redshift_distributions_wide(data = wide_data,
+                                         deep_data = spec_data,
+                                         overlap_weighted_pchat = False,
+                                         overlap_weighted_pzc = False, 
+                                         bins = zbins,
+                                         deep_som_size=deep_som_size,
+                                         pcchat = pc_chat,
+                                         tomo_bins = tomo_bins_wide,
+                                         key = key,
+                                         force_assignment = False,
+                                         cell_key = 'cell_wide')
+
+        keylabel = 'test'
+        outfile = os.path.join(output_path, 'hists_wide_NOT_BIN_CONDITIONALIZED_{}.npy'.format(keylabel))
+        np.save(outfile, nz)
+        outfile = os.path.join(output_path, 'nz_newbinning_onwide_NOT_BIN_CONDITIONALIZED_{}.png'.format(keylabel))
+        plot_nz(nz, zbins, outfile)
+
+        '''
+        model_update = dict(pz_c=pz_c, pc_chat=pc_chat, pchat=p_chat,
                             pz_chat=pz_chat)
         self.model = self.model.update(model_update)
-        
-        return pz_c, pc_chat, pchat, pz_chat
+        '''
+        return pz_c, pc_chat, nz
 
     def _process_chunk(self, start, end, data, first):
         """
@@ -288,46 +683,76 @@ class SOMPZEstimator(CatEstimator):
         #TODO
 
     def run(self,
-            flux_deep, flux_err_deep,
-            flux_wide, flux_err_wide):
-        ### assign samples to SOMs
-        if 'cells_deep' in self.model and 'dist_deep' in self.model:
-            cells_deep, dist_deep = self.model['cells_deep'], self.model['dist_deep']
-        else:
-            cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
+            spec_data,
+            balrog_data,
+            wide_data,):
+        samples = [spec_data, balrog_data, wide_data]
+        labels = ['spec_data', 'balrog_data', 'wide_data']
+        output_path = './' # make kwarg
+        # assign samples to SOMs
+        # TODO: put repeated code into functions
+        # TODO: handle case of sample already having been assigned
+        # TODO: handle file i/o better        
+        for i, (data, label) in enumerate(zip(samples, labels)):
+            if i <= 1:
+                print(self.config.deep_bands)
+                data_deep = data()[self.config.deep_bands]
+                data_deep_ndarray = np.array(data_deep,copy=False)
+                flux_deep = data_deep_ndarray.view((np.float32,
+                                                    len(self.config.deep_bands)))
 
-        if 'cells_wide' in self.model and 'dist_wide' in self.model:
-            cells_wide, dist_wide = self.model['cells_wide'], self.model['dist_wide']
-        else:
+                data_deep = data()[self.config.err_deep_bands]
+                data_deep_ndarray = np.array(data_deep,copy=False)
+                flux_err_deep = data_deep_ndarray.view((np.float32,
+                                                    len(self.config.err_deep_bands)))
+
+                cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
+
+                data().add_column(cells_deep, name='cell_deep')
+                data().add_column(dist_deep, name='dist_deep')
+                outfile = os.path.join(output_path, label + '_deep.npz')
+                np.savez(outfile, cells=cells_deep, dist=dist_deep)
+            else:
+                cells_deep, dist_deep = None, None
+                
+            data_wide = data()[self.config.wide_bands]
+            data_wide_ndarray = np.array(data_wide,copy=False)
+            flux_wide = data_wide_ndarray.view((np.float32,
+                                                len(self.config.wide_bands)))
+
+            data_wide = data()[self.config.err_wide_bands]
+            data_wide_ndarray = np.array(data_wide,copy=False)
+            flux_err_wide = data_wide_ndarray.view((np.float32,
+                                                len(self.config.err_wide_bands)))
+            
             cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
-        ### save cells_deep, dist_deep, cells_wide, dist_wide to self
-        model_update = dict(cells_deep=cells_deep, dist_deep=dist_deep,
-                            cells_wide=cells_wide, dist_wide=dist_wide)
-        self.model = self.model.update(model_update)
-        self.add_data('model', self.model) # is this necessary?
+            data().add_column(cells_wide, name='cell_wide')
+            data().add_column(dist_wide, name='dist_wide')
 
-        ### save cells_deep, dist_deep, cells_wide, dist_wide to disk
+            ### save cells_deep, dist_deep, cells_wide, dist_wide to disk
+            outfile = os.path.join(output_path, label +  '_wide.npz')
+            np.savez(outfile, cells=cells_wide, dist=dist_wide)
+
+            outfile = os.path.join(output_path, label + '_incl_cells.h5')
+            print('write ' + outfile)
+
+            names = [name for name in data().colnames if len(data()[name].shape) <= 1]
+            df_out = data()[names].to_pandas()            
+            df_out.to_hdf(outfile, key=label)
+            #fits.writeto(outfile, data().as_array(), overwrite=True)
         
+        pz_c, pc_chat, nz = self._estimate_pdf(*samples)
+        #self.set_data('nz', nz)
         
-        pz_c, pc_chat, pchat, pz_chat = self._estimate_pdf()
-
-        # TODO: construct tomographic bins bhat = {chat}
-        # TODO: compute p(z|bhat) \propto sum_chat p(z|chat)
-
     def estimate(self,
-                 input_deep_data,
-                 input_deep_err,
-                 input_wide_data,
-                 input_wide_err,):
-        #self.add_data('input_spec_data', input_spec_data)
-        #input_deep_data = self.model.get_data('input_deep_data')
-        #input_wide_data = self.model.get_data('input_wide_data')
+                 spec_data,
+                 balrog_data,
+                 wide_data,):
         
-        self.run(input_deep_data,
-                 input_deep_err,
-                 input_wide_data,
-                 input_wide_err,)
-        self.finalize()
+        self.run(spec_data,
+                 balrog_data,
+                 wide_data,)
+        # self.finalize() # TODO enable file i/o to handle this
 
         return #self.model
