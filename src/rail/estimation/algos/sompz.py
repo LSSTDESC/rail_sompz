@@ -722,8 +722,6 @@ class SOMPZEstimator(CatEstimator):
                 cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
 
                 self.deep_assignment[label] = (cells_deep, dist_deep)
-                #data.add_column(cells_deep, name='cell_deep')
-                #data.add_column(dist_deep, name='dist_deep')
                 outfile = os.path.join(output_path, label + '_deep.npz')
                 np.savez(outfile, cells=cells_deep, dist=dist_deep)
             else:
@@ -742,10 +740,9 @@ class SOMPZEstimator(CatEstimator):
             cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
             self.wide_assignment[label] = (cells_wide, dist_wide)
-            #data.add_column(cells_wide, name='cell_wide')
-            #data.add_column(dist_wide, name='dist_wide')
 
             ### save cells_deep, dist_deep, cells_wide, dist_wide to disk
+            '''
             outfile = os.path.join(output_path, label +  '_wide.npz')
             np.savez(outfile, cells=cells_wide, dist=dist_wide)
 
@@ -756,16 +753,18 @@ class SOMPZEstimator(CatEstimator):
             df_out = data[names].to_pandas()            
             df_out.to_hdf(outfile, key=label)
             #fits.writeto(outfile, data.as_array(), overwrite=True)
-        
+            '''
         pz_c, pc_chat, nz = self._estimate_pdf() # *samples
         self.nz = nz
         self.add_data('nz', self.nz)
         
-        self.add_data('wide_data_cells_wide'  , np.array([0])) # wide_data_cells_wide)
-        self.add_data('balrog_data_cells_wide', np.array([0])) # balrog_data_cells_wide)
-        self.add_data('balrog_data_cells_deep', np.array([0])) # balrog_data_cells_deep)
-        self.add_data('spec_data_cells_wide'  , np.array([0])) # spec_data_cells_wide)
-        self.add_data('spec_data_cells_deep'  , np.array([0])) # spec_data_cells_deep)
+        self.add_data('deep_assignment'  , self.deep_assignment) # wide_data_cells_wide)
+        self.add_data('wide_assignment'  , self.wide_assignment) # wide_data_cells_wide)
+        
+        #self.add_data('balrog_data_cells_wide', np.array([0])) # balrog_data_cells_wide)
+        #self.add_data('balrog_data_cells_deep', np.array([0])) # balrog_data_cells_deep)
+        #self.add_data('spec_data_cells_wide'  , np.array([0])) # spec_data_cells_wide)
+        #self.add_data('spec_data_cells_deep'  , np.array([0])) # spec_data_cells_deep)
 
     def estimate(self,
                  spec_data,
