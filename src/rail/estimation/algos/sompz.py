@@ -78,6 +78,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
     hists = []
     missing_cells = []
     populated_cells = []
+    pdb.set_trace()
     for ci, c in enumerate(cells):
         try:
             df = deep_data.groupby('cell_deep').get_group(c)
@@ -513,6 +514,11 @@ class SOMPZEstimator(CatEstimator):
                           thresh_val_deep=Param(float, 1.e-5, msg="threshold value for set_threshold for deep data"),
                           set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
                           thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"))
+
+    inputs = [('model' : ModelHandle),
+              ('spec_data' : TableHandle),
+              ('balrog_data' : TableHandle),
+              ('wide_data' : TableHandle), ]
     #outputs = [('nz', PqHandle)]
     
     def __init__(self, args, comm=None):
@@ -579,38 +585,27 @@ class SOMPZEstimator(CatEstimator):
         zbins  = np.arange(-zbins_dz/2.,zbins_max+zbins_dz,zbins_dz)
         # TODO: improve file i/o
         output_path = './'
-        infile_spec_data = os.path.join(output_path, 'spec_data_incl_cells.h5')
-        spec_data = pd.read_hdf(infile_spec_data, key='spec_data')
-        #spec_data = fits.open(infile_spec_data)[1].data
-
-        infile_balrog_data = os.path.join(output_path, 'balrog_data_incl_cells.h5')
-        balrog_data = pd.read_hdf(infile_balrog_data, key='balrog_data')
-        #balrog_data = fits.open(infile_balrog_data)[1].data
-
-        infile_wide_data = os.path.join(output_path, 'wide_data_incl_cells.h5')
-        #wide_data = fits.open(infile_wide_data)[1].data
-        wide_data = pd.read_hdf(infile_wide_data, key='wide_data')
-        
-        # TODO: compute p(z|c), redshift distributions in deep SOM cells
         deep_som_size = np.product(self.model['deep_som'].shape)
         wide_som_size = np.product(self.model['wide_som'].shape)
         
         all_deep_cells = np.arange(deep_som_size)
         key = 'specz_redshift'
-        pz_c = np.array(get_deep_histograms(wide_data,
-                                            spec_data,
+
+        
+        pz_c = np.array(get_deep_histograms(None, # this arg apparently doesn't matter.self.deep_assignment['balrog_data'][0],
+                                            spec_data_for_pz,
                                             key=key,
                                             cells=all_deep_cells,
                                             overlap_weighted_pzc=False,
                                             bins=zbins))
         np.savez(output_path + 'pzc.npy', pz_c=pz_c)
-
+        #pdb.set_trace()
         # TODO: compute p(c|chat), transfer function
         #cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
         pc_chat = calculate_pcchat(deep_som_size,
                                    wide_som_size,
-                                   balrog_data['cell_deep'],#.values,
-                                   balrog_data['cell_wide'],#.values,       
+                                   self.deep_assignment['balrog_data'][0],#balrog_data['cell_deep'],#.values,
+                                   self.wide_assignment['balrog_data'][0],#balrog_data['cell_wide'],#.values,       
                                    np.ones(len(balrog_data)))#balrog_data['overlap_weight'].values)
         outfile = os.path.join(output_path, 'pcchat.npy')
         np.savez(outfile, pc_chat=pc_chat)
@@ -682,53 +677,58 @@ class SOMPZEstimator(CatEstimator):
         """
         #TODO
 
-    def run(self,
-            spec_data,
-            balrog_data,
-            wide_data,):
+    def run(self,):
+        spec_data = self.get_data("spec_data")
+        balrog_data = self.get_data("balrog_data")
+        wide_data = self.get_data("wide_data")
+        
         samples = [spec_data, balrog_data, wide_data]
         labels = ['spec_data', 'balrog_data', 'wide_data']
         output_path = './' # make kwarg
         # assign samples to SOMs
         # TODO: put repeated code into functions
         # TODO: handle case of sample already having been assigned
-        # TODO: handle file i/o better        
+        # TODO: handle file i/o better
+        self.deep_assignment = {}
+        self.wide_assignment = {}
         for i, (data, label) in enumerate(zip(samples, labels)):
             if i <= 1:
                 print(self.config.deep_bands)
-                data_deep = data()[self.config.deep_bands]
+                data_deep = data[self.config.deep_bands]
                 data_deep_ndarray = np.array(data_deep,copy=False)
                 flux_deep = data_deep_ndarray.view((np.float32,
                                                     len(self.config.deep_bands)))
 
-                data_deep = data()[self.config.err_deep_bands]
+                data_deep = data[self.config.err_deep_bands]
                 data_deep_ndarray = np.array(data_deep,copy=False)
                 flux_err_deep = data_deep_ndarray.view((np.float32,
                                                     len(self.config.err_deep_bands)))
 
                 cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
 
-                data().add_column(cells_deep, name='cell_deep')
-                data().add_column(dist_deep, name='dist_deep')
+                self.deep_assignment[label] = (cells_deep, dist_deep)
+                #data.add_column(cells_deep, name='cell_deep')
+                #data.add_column(dist_deep, name='dist_deep')
                 outfile = os.path.join(output_path, label + '_deep.npz')
                 np.savez(outfile, cells=cells_deep, dist=dist_deep)
             else:
                 cells_deep, dist_deep = None, None
                 
-            data_wide = data()[self.config.wide_bands]
+            data_wide = data[self.config.wide_bands]
             data_wide_ndarray = np.array(data_wide,copy=False)
             flux_wide = data_wide_ndarray.view((np.float32,
                                                 len(self.config.wide_bands)))
 
-            data_wide = data()[self.config.err_wide_bands]
+            data_wide = data[self.config.err_wide_bands]
             data_wide_ndarray = np.array(data_wide,copy=False)
             flux_err_wide = data_wide_ndarray.view((np.float32,
                                                 len(self.config.err_wide_bands)))
             
             cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
-            data().add_column(cells_wide, name='cell_wide')
-            data().add_column(dist_wide, name='dist_wide')
+            self.wide_assignment[label] = (cells_wide, dist_wide)
+            #data.add_column(cells_wide, name='cell_wide')
+            #data.add_column(dist_wide, name='dist_wide')
 
             ### save cells_deep, dist_deep, cells_wide, dist_wide to disk
             outfile = os.path.join(output_path, label +  '_wide.npz')
@@ -737,22 +737,24 @@ class SOMPZEstimator(CatEstimator):
             outfile = os.path.join(output_path, label + '_incl_cells.h5')
             print('write ' + outfile)
 
-            names = [name for name in data().colnames if len(data()[name].shape) <= 1]
-            df_out = data()[names].to_pandas()            
+            names = [name for name in data.colnames if len(data[name].shape) <= 1]
+            df_out = data[names].to_pandas()            
             df_out.to_hdf(outfile, key=label)
-            #fits.writeto(outfile, data().as_array(), overwrite=True)
+            #fits.writeto(outfile, data.as_array(), overwrite=True)
         
-        pz_c, pc_chat, nz = self._estimate_pdf(*samples)
+        pz_c, pc_chat, nz = self._estimate_pdf() # *samples
         #self.set_data('nz', nz)
         
     def estimate(self,
                  spec_data,
                  balrog_data,
                  wide_data,):
+
+        self.set_data("spec_data", spec_data)
+        self.set_data("balrog_data", balrog_data)
+        self.set_data("wide_data", wide_data)
         
-        self.run(spec_data,
-                 balrog_data,
-                 wide_data,)
-        # self.finalize() # TODO enable file i/o to handle this
+        self.run()
+        self.finalize() # TODO enable file i/o to handle this
 
         return #self.model
