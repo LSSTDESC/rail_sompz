@@ -6,7 +6,7 @@ import os
 import numpy as np
 import sys
 from ceci.config import StageParameter as Param
-from rail.core.data import TableHandle, ModelHandle
+from rail.core.data import TableHandle, ModelHandle, FitsHandle
 from rail.estimation.estimator import CatEstimator, CatInformer
 from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
@@ -78,7 +78,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
     hists = []
     missing_cells = []
     populated_cells = []
-    pdb.set_trace()
+
     for ci, c in enumerate(cells):
         try:
             df = deep_data.groupby('cell_deep').get_group(c)
@@ -515,11 +515,11 @@ class SOMPZEstimator(CatEstimator):
                           set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
                           thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"))
 
-    inputs = [('model' : ModelHandle),
-              ('spec_data' : TableHandle),
-              ('balrog_data' : TableHandle),
-              ('wide_data' : TableHandle), ]
-    #outputs = [('nz', PqHandle)]
+    inputs = [('model' , ModelHandle),
+              ('spec_data' , TableHandle),
+              ('balrog_data' , TableHandle),
+              ('wide_data' , TableHandle), ]
+    outputs = [('nz', FitsHandle)] # for the time being
     
     def __init__(self, args, comm=None):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
@@ -578,7 +578,7 @@ class SOMPZEstimator(CatEstimator):
 
         return cells_test, dist_test
     
-    def _estimate_pdf(self, spec_data, balrog_data, wide_data):
+    def _estimate_pdf(self,):# spec_data, balrog_data, wide_data):
         # TODO: read this stuff from cfg
         zbins_dz  = 0.01
         zbins_max = 6.00
@@ -591,7 +591,15 @@ class SOMPZEstimator(CatEstimator):
         all_deep_cells = np.arange(deep_som_size)
         key = 'specz_redshift'
 
-        
+        spec_data = self.get_data('spec_data')
+        balrog_data = self.get_data('balrog_data')
+        wide_data = self.get_data('wide_data')
+
+        cell_deep_spec_data = self.deep_assignment['spec_data'][0]
+        cell_wide_spec_data = self.wide_assignment['spec_data'][0]        
+        spec_data_for_pz = pd.DataFrame({key : spec_data[key].byteswap().newbyteorder(), # this may need to be changed for production
+                                         'cell_deep' : cell_deep_spec_data,
+                                         'cell_wide' : cell_wide_spec_data})
         pz_c = np.array(get_deep_histograms(None, # this arg apparently doesn't matter.self.deep_assignment['balrog_data'][0],
                                             spec_data_for_pz,
                                             key=key,
@@ -599,7 +607,7 @@ class SOMPZEstimator(CatEstimator):
                                             overlap_weighted_pzc=False,
                                             bins=zbins))
         np.savez(output_path + 'pzc.npy', pz_c=pz_c)
-        #pdb.set_trace()
+
         # TODO: compute p(c|chat), transfer function
         #cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
         pc_chat = calculate_pcchat(deep_som_size,
@@ -612,12 +620,13 @@ class SOMPZEstimator(CatEstimator):
 
         
         # TODO: compute p(chat), occupation in wide SOM cells
-        
-
         all_wide_cells = np.arange(wide_som_size)
-
-        pz_chat = np.array(histogram(wide_data,
-                                     spec_data,
+        cell_wide_wide_data = self.wide_assignment['wide_data'][0]
+        wide_data_for_pz = pd.DataFrame({'cell_wide' : cell_wide_wide_data})
+        
+        #pdb.set_trace()
+        pz_chat = np.array(histogram(wide_data_for_pz,
+                                     spec_data_for_pz,
                                      key=key,
                                      pcchat = pc_chat,
                                      cells=all_wide_cells, 
@@ -633,21 +642,21 @@ class SOMPZEstimator(CatEstimator):
         # assign sample to tomographic bins
         bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # TODO make this a config input
         n_bins = len(bin_edges) - 1
-        tomo_bins_wide_dict = bin_assignment_spec(spec_data,
+        tomo_bins_wide_dict = bin_assignment_spec(spec_data_for_pz,
                                                   deep_som_size,
                                                   wide_som_size,
                                                   bin_edges = bin_edges,
                                                   key_z = key,
                                                   key_cells_wide='cell_wide')
 
-        cell_occupation_info = wide_data.groupby('cell_wide')['cell_wide'].count()
+        cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
         bin_occupation_info = {'bin' + str(i) : np.sum(cell_occupation_info.loc[tomo_bins_wide_dict[i]].values) for i in range(n_bins)}
         print(bin_occupation_info)
 
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
         # calculate n(z)
-        nz = redshift_distributions_wide(data = wide_data,
-                                         deep_data = spec_data,
+        nz = redshift_distributions_wide(data = wide_data_for_pz,
+                                         deep_data = spec_data_for_pz,
                                          overlap_weighted_pchat = False,
                                          overlap_weighted_pzc = False, 
                                          bins = zbins,
@@ -743,8 +752,10 @@ class SOMPZEstimator(CatEstimator):
             #fits.writeto(outfile, data.as_array(), overwrite=True)
         
         pz_c, pc_chat, nz = self._estimate_pdf() # *samples
-        #self.set_data('nz', nz)
-        
+        self.nz = nz
+
+        self.add_data('nz', self.nz)
+
     def estimate(self,
                  spec_data,
                  balrog_data,
