@@ -519,7 +519,13 @@ class SOMPZEstimator(CatEstimator):
               ('spec_data' , TableHandle),
               ('balrog_data' , TableHandle),
               ('wide_data' , TableHandle), ]
-    outputs = [('nz', FitsHandle)] # for the time being
+    outputs = [('nz', ModelHandle),
+               ('wide_data_cells_wide', ModelHandle),
+               ('balrog_data_cells_wide', ModelHandle),
+               ('balrog_data_cells_deep', ModelHandle),
+               ('spec_data_cells_wide', ModelHandle),
+               ('spec_data_cells_deep', ModelHandle),                              
+               ] # for the time being
     
     def __init__(self, args, comm=None):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
@@ -753,8 +759,13 @@ class SOMPZEstimator(CatEstimator):
         
         pz_c, pc_chat, nz = self._estimate_pdf() # *samples
         self.nz = nz
-
         self.add_data('nz', self.nz)
+        
+        self.add_data('wide_data_cells_wide'  , np.array([0])) # wide_data_cells_wide)
+        self.add_data('balrog_data_cells_wide', np.array([0])) # balrog_data_cells_wide)
+        self.add_data('balrog_data_cells_deep', np.array([0])) # balrog_data_cells_deep)
+        self.add_data('spec_data_cells_wide'  , np.array([0])) # spec_data_cells_wide)
+        self.add_data('spec_data_cells_deep'  , np.array([0])) # spec_data_cells_deep)
 
     def estimate(self,
                  spec_data,
@@ -766,6 +777,7 @@ class SOMPZEstimator(CatEstimator):
         self.set_data("wide_data", wide_data)
         
         self.run()
+        pdb.set_trace()
         self.finalize() # TODO enable file i/o to handle this
 
         return #self.model
