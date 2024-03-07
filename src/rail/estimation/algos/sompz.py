@@ -1,12 +1,13 @@
 """
 Port of SOMPZ
 """
-import pdb
+# import pdb
 import os
 import numpy as np
 import sys
+import qp
 from ceci.config import StageParameter as Param
-from rail.core.data import TableHandle, ModelHandle, FitsHandle
+from rail.core.data import TableHandle, ModelHandle, FitsHandle, QPHandle
 from rail.estimation.estimator import CatEstimator, CatInformer
 from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
@@ -17,6 +18,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 
 def_bands = ["u", "g", "r", "i", "z", "y"]
+default_bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0]
 default_input_names = []
 default_err_names = []
 default_zero_points = []
@@ -307,7 +309,11 @@ def get_cell_weights_wide(data, overlap_weighted_pchat, cell_key='cell_wide', fo
 def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
                         key_z='Z', key_cells_wide='cell_wide_unsheared'):
     # assign gals in redshift sample to bins
-    spec_data['tomo_bin'] = pd.cut(spec_data[key_z], bin_edges, labels=[0, 1, 2, 3])
+    xlabels = []
+    nbins = len(bin_edges) - 1
+    for ii in range(nbins):
+        xlabels.append(ii)
+    spec_data['tomo_bin'] = pd.cut(spec_data[key_z], bin_edges, labels=xlabels)
 
     ncells_with_spec_data = len(np.unique(spec_data[key_cells_wide].values))
     cell_bin_assignment = np.ones(wide_som_size, dtype=int) * -1
@@ -321,7 +327,8 @@ def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
 
     # reformat bins into dict
     tomo_bins_wide = {}
-    for i in range(4):
+    nbins = len(bin_edges) - 1
+    for i in range(nbins):
         tomo_bins_wide[i] = np.where(cell_bin_assignment == i)[0]
 
     return tomo_bins_wide
@@ -491,6 +498,10 @@ class SOMPZEstimator(CatEstimator):
     name = "SOMPZEstimator"
     config_options = CatEstimator.config_options.copy()
     config_options.update(redshift_col=SHARED_PARAMS,
+                          bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
+                          zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
+                          zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
+                          zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
                           deep_groupname=Param(str, "photometry", msg="hdf5_groupname for deep data"),
                           wide_groupname=Param(str, "photometry", msg="hdf5_groupname for wide data"),
                           inputs_deep=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
@@ -519,13 +530,14 @@ class SOMPZEstimator(CatEstimator):
               ('spec_data' , TableHandle),
               ('balrog_data' , TableHandle),
               ('wide_data' , TableHandle), ]
-    outputs = [('nz', ModelHandle),
-               ('wide_data_cells_wide', ModelHandle),
-               ('balrog_data_cells_wide', ModelHandle),
-               ('balrog_data_cells_deep', ModelHandle),
-               ('spec_data_cells_wide', ModelHandle),
-               ('spec_data_cells_deep', ModelHandle),                              
-               ] # for the time being
+    outputs = [('nz', QPHandle),
+               ]
+               #('wide_data_cells_wide', ModelHandle),
+               #('balrog_data_cells_wide', ModelHandle),
+               #('balrog_data_cells_deep', ModelHandle),
+               #('spec_data_cells_wide', ModelHandle),
+               #('spec_data_cells_deep', ModelHandle),                              
+               #] # for the time being
     
     def __init__(self, args, comm=None):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
@@ -586,9 +598,12 @@ class SOMPZEstimator(CatEstimator):
     
     def _estimate_pdf(self,):# spec_data, balrog_data, wide_data):
         # TODO: read this stuff from cfg
-        zbins_dz  = 0.01
-        zbins_max = 6.00
-        zbins  = np.arange(-zbins_dz/2.,zbins_max+zbins_dz,zbins_dz)
+        # zbins_dz  = 0.01
+        # zbins_max = 6.00
+        zbins  = np.arange(self.config.zbins_min - self.config.zbins_dz/2.,
+                           self.config.zbins_max + self.config.zbins_dz,
+                           self.config.zbins_dz)
+        self.bincents = 0.5*(zbins[1:] + zbins[:-1])
         # TODO: improve file i/o
         output_path = './'
         deep_som_size = np.product(self.model['deep_som'].shape)
@@ -646,12 +661,12 @@ class SOMPZEstimator(CatEstimator):
         
         # TODO: compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
         # assign sample to tomographic bins
-        bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # TODO make this a config input
-        n_bins = len(bin_edges) - 1
+        # bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # TODO make this a config input
+        n_bins = len(self.config.bin_edges) - 1
         tomo_bins_wide_dict = bin_assignment_spec(spec_data_for_pz,
                                                   deep_som_size,
                                                   wide_som_size,
-                                                  bin_edges = bin_edges,
+                                                  bin_edges = self.config.bin_edges,
                                                   key_z = key,
                                                   key_cells_wide='cell_wide')
 
@@ -755,11 +770,12 @@ class SOMPZEstimator(CatEstimator):
             #fits.writeto(outfile, data.as_array(), overwrite=True)
             '''
         pz_c, pc_chat, nz = self._estimate_pdf() # *samples
-        self.nz = nz
-        self.add_data('nz', self.nz)
+        # self.nz = nz
+        tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
+        self.add_data('nz', tomo_ens)
         
-        self.add_data('deep_assignment'  , self.deep_assignment) # wide_data_cells_wide)
-        self.add_data('wide_assignment'  , self.wide_assignment) # wide_data_cells_wide)
+        # self.add_data('deep_assignment'  , self.deep_assignment) # wide_data_cells_wide)
+        # self.add_data('wide_assignment'  , self.wide_assignment) # wide_data_cells_wide)
         
         #self.add_data('balrog_data_cells_wide', np.array([0])) # balrog_data_cells_wide)
         #self.add_data('balrog_data_cells_deep', np.array([0])) # balrog_data_cells_deep)
@@ -776,7 +792,7 @@ class SOMPZEstimator(CatEstimator):
         self.set_data("wide_data", wide_data)
         
         self.run()
-        pdb.set_trace()
+        # pdb.set_trace()
         self.finalize() # TODO enable file i/o to handle this
 
         return #self.model
