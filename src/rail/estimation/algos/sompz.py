@@ -7,7 +7,7 @@ import numpy as np
 import sys
 import qp
 from ceci.config import StageParameter as Param
-from rail.core.data import TableHandle, ModelHandle, FitsHandle, QPHandle
+from rail.core.data import TableHandle, ModelHandle, FitsHandle, QPHandle, Hdf5Handle
 from rail.estimation.estimator import CatEstimator, CatInformer
 from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
@@ -16,6 +16,7 @@ from rail.core.common_params import SHARED_PARAMS
 import astropy.io.fits as fits # TODO handle file i/o with rail
 import pandas as pd
 import matplotlib.pyplot as plt
+
 
 def_bands = ["u", "g", "r", "i", "z", "y"]
 default_bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0]
@@ -531,13 +532,13 @@ class SOMPZEstimator(CatEstimator):
               ('balrog_data' , TableHandle),
               ('wide_data' , TableHandle), ]
     outputs = [('nz', QPHandle),
+               ('spec_data_deep_assignment', Hdf5Handle),
+               ('balrog_data_deep_assignment', Hdf5Handle),
+               ('wide_data_assignment', Hdf5Handle),
+               ('pz_c', Hdf5Handle),
+               ('pz_chat', Hdf5Handle),
+               ('pc_chat', Hdf5Handle),
                ]
-               #('wide_data_cells_wide', ModelHandle),
-               #('balrog_data_cells_wide', ModelHandle),
-               #('balrog_data_cells_deep', ModelHandle),
-               #('spec_data_cells_wide', ModelHandle),
-               #('spec_data_cells_deep', ModelHandle),                              
-               #] # for the time being
     
     def __init__(self, args, comm=None):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
@@ -591,21 +592,19 @@ class SOMPZEstimator(CatEstimator):
 
         # Now we classify the objects into cells and save these cells
         cells_test, dist_test = som.classify(flux[::subsamp, :], flux_err[::subsamp, :])
-        outfile = os.path.join(output_path, "som_{0}_{1}x{1}_assign.npz".format(somstr,som_dim))
-        np.savez(outfile, cells=cells_test, dist=dist_test)
+        # take out numpy savez
+        # outfile = os.path.join(output_path, "som_{0}_{1}x{1}_assign.npz".format(somstr,som_dim))
+        # np.savez(outfile, cells=cells_test, dist=dist_test)
 
         return cells_test, dist_test
     
-    def _estimate_pdf(self,):# spec_data, balrog_data, wide_data):
-        # TODO: read this stuff from cfg
-        # zbins_dz  = 0.01
-        # zbins_max = 6.00
+    def _estimate_pdf(self,):
         zbins  = np.arange(self.config.zbins_min - self.config.zbins_dz/2.,
                            self.config.zbins_max + self.config.zbins_dz,
                            self.config.zbins_dz)
         self.bincents = 0.5*(zbins[1:] + zbins[:-1])
         # TODO: improve file i/o
-        output_path = './'
+        # output_path = './'
         deep_som_size = np.product(self.model['deep_som'].shape)
         wide_som_size = np.product(self.model['wide_som'].shape)
         
@@ -627,7 +626,8 @@ class SOMPZEstimator(CatEstimator):
                                             cells=all_deep_cells,
                                             overlap_weighted_pzc=False,
                                             bins=zbins))
-        np.savez(output_path + 'pzc.npy', pz_c=pz_c)
+        # take out numpy savez
+        # np.savez(output_path + 'pzc.npy', pz_c=pz_c)
 
         # TODO: compute p(c|chat), transfer function
         #cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
@@ -636,8 +636,11 @@ class SOMPZEstimator(CatEstimator):
                                    self.deep_assignment['balrog_data'][0],#balrog_data['cell_deep'],#.values,
                                    self.wide_assignment['balrog_data'][0],#balrog_data['cell_wide'],#.values,       
                                    np.ones(len(balrog_data)))#balrog_data['overlap_weight'].values)
-        outfile = os.path.join(output_path, 'pcchat.npy')
-        np.savez(outfile, pc_chat=pc_chat)
+        pcchatdict = dict(pc_chat=pc_chat)
+        self.add_data('pc_chat', pcchatdict)
+        # use to write pc_chat out to file, leave in temporarily for cross checks
+        # outfile = os.path.join(output_path, 'pcchat.npy')
+        # np.savez(outfile, pc_chat=pc_chat)
 
         
         # TODO: compute p(chat), occupation in wide SOM cells
@@ -656,8 +659,11 @@ class SOMPZEstimator(CatEstimator):
                                      overlap_weighted_pzc=False,
                                      bins=zbins, 
                                      individual_chat=True))
-        outfile = os.path.join(output_path, 'pzchat.npy')
-        np.savez(outfile, pz_chat=pz_chat)
+        # note: used to write out pz_chat to np, leave in temporarily for cross-checks
+        # outfile = os.path.join(output_path, 'pzchat.npy')
+        # np.savez(outfile, pz_chat=pz_chat)
+        pzchatdict = dict(pz_chat=pz_chat)
+        self.add_data('pz_chat', pzchatdict)
         
         # TODO: compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
         # assign sample to tomographic bins
@@ -672,7 +678,7 @@ class SOMPZEstimator(CatEstimator):
 
         cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
         bin_occupation_info = {'bin' + str(i) : np.sum(cell_occupation_info.loc[tomo_bins_wide_dict[i]].values) for i in range(n_bins)}
-        print(bin_occupation_info)
+        # print(bin_occupation_info)
 
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
         # calculate n(z)
@@ -689,10 +695,11 @@ class SOMPZEstimator(CatEstimator):
                                          cell_key = 'cell_wide')
 
         keylabel = 'test'
-        outfile = os.path.join(output_path, 'hists_wide_NOT_BIN_CONDITIONALIZED_{}.npy'.format(keylabel))
-        np.save(outfile, nz)
-        outfile = os.path.join(output_path, 'nz_newbinning_onwide_NOT_BIN_CONDITIONALIZED_{}.png'.format(keylabel))
-        plot_nz(nz, zbins, outfile)
+        # take out numpy savez
+        # outfile = os.path.join(output_path, 'hists_wide_NOT_BIN_CONDITIONALIZED_{}.npy'.format(keylabel))
+        # np.save(outfile, nz)
+        # outfile = os.path.join(output_path, 'nz_newbinning_onwide_NOT_BIN_CONDITIONALIZED_{}.png'.format(keylabel))
+        # plot_nz(nz, zbins, outfile)
 
         '''
         model_update = dict(pz_c=pz_c, pc_chat=pc_chat, pchat=p_chat,
@@ -713,8 +720,10 @@ class SOMPZEstimator(CatEstimator):
         wide_data = self.get_data("wide_data")
         
         samples = [spec_data, balrog_data, wide_data]
+        # NOTE: DO NOT CHANGE NAMES OF 'labels' below! They are used
+        # in the naming of the outputs of the stage!
         labels = ['spec_data', 'balrog_data', 'wide_data']
-        output_path = './' # make kwarg
+        # output_path = './' # make kwarg
         # assign samples to SOMs
         # TODO: put repeated code into functions
         # TODO: handle case of sample already having been assigned
@@ -723,7 +732,7 @@ class SOMPZEstimator(CatEstimator):
         self.wide_assignment = {}
         for i, (data, label) in enumerate(zip(samples, labels)):
             if i <= 1:
-                print(self.config.deep_bands)
+                # print(self.config.deep_bands)
                 data_deep = data[self.config.deep_bands]
                 data_deep_ndarray = np.array(data_deep,copy=False)
                 flux_deep = data_deep_ndarray.view((np.float32,
@@ -737,8 +746,12 @@ class SOMPZEstimator(CatEstimator):
                 cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
 
                 self.deep_assignment[label] = (cells_deep, dist_deep)
-                outfile = os.path.join(output_path, label + '_deep.npz')
-                np.savez(outfile, cells=cells_deep, dist=dist_deep)
+                # take out numpy savez 
+                # outfile = os.path.join(output_path, label + '_deep.npz')
+                # np.savez(outfile, cells=cells_deep, dist=dist_deep)
+                tmpdict = dict(cells=cells_deep, dist=dist_deep)
+                outlabel = f"{label}_deep_assignment"
+                self.add_data(outlabel, tmpdict)
             else:
                 cells_deep, dist_deep = None, None
                 
@@ -755,6 +768,10 @@ class SOMPZEstimator(CatEstimator):
             cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
             self.wide_assignment[label] = (cells_wide, dist_wide)
+            if i>1:
+                widedict = dict(cells=cells_wide, dist=dist_wide)
+                widelabel = f"{label}_assignment"
+                self.add_data(widelabel, widedict)
 
             ### save cells_deep, dist_deep, cells_wide, dist_wide to disk
             '''
@@ -773,15 +790,10 @@ class SOMPZEstimator(CatEstimator):
         # self.nz = nz
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
-        
-        # self.add_data('deep_assignment'  , self.deep_assignment) # wide_data_cells_wide)
-        # self.add_data('wide_assignment'  , self.wide_assignment) # wide_data_cells_wide)
-        
-        #self.add_data('balrog_data_cells_wide', np.array([0])) # balrog_data_cells_wide)
-        #self.add_data('balrog_data_cells_deep', np.array([0])) # balrog_data_cells_deep)
-        #self.add_data('spec_data_cells_wide'  , np.array([0])) # spec_data_cells_wide)
-        #self.add_data('spec_data_cells_deep'  , np.array([0])) # spec_data_cells_deep)
 
+        pzcdict = dict(pz_c=pz_c)
+        self.add_data('pz_c', pzcdict) # wide_data_cells_wide)
+        
     def estimate(self,
                  spec_data,
                  balrog_data,
