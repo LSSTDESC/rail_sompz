@@ -4,7 +4,7 @@ Port of SOMPZ
 # import pdb
 import os
 import numpy as np
-import sys
+# import sys
 import qp
 from ceci.config import StageParameter as Param
 from rail.core.data import TableHandle, ModelHandle, FitsHandle, QPHandle, Hdf5Handle
@@ -13,7 +13,7 @@ from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
 from rail.core.common_params import SHARED_PARAMS
 
-import astropy.io.fits as fits # TODO handle file i/o with rail
+# import astropy.io.fits as fits  # TODO handle file i/o with rail
 import pandas as pd
 import matplotlib.pyplot as plt
 
@@ -28,6 +28,7 @@ for band in def_bands:
     default_err_names.append(f"mag_err_{band}_lsst")
     default_zero_points.append(30.)
 
+
 def mag2flux(mag, zero_pt=30):
     # zeropoint: M = 30 <=> f = 1
     exponent = (mag - zero_pt) / (-2.5)
@@ -38,6 +39,7 @@ def mag2flux(mag, zero_pt=30):
 def magerr2fluxerr(magerr, flux):
     coef = np.log(10) / -2.5
     return np.abs(coef * magerr * flux)
+
 
 def calculate_pcchat(deep_som_size, wide_som_size, cell_deep_assign, cell_wide_assign, overlap_weight):
     pcchat_num = np.zeros((deep_som_size, wide_som_size))
@@ -52,6 +54,7 @@ def calculate_pcchat(deep_som_size, wide_som_size, cell_deep_assign, cell_wide_a
     pcchat = np.where(np.isfinite(pcchat), pcchat, 0)
 
     return pcchat
+
 
 def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins, overlap_key='overlap_weight',
                         deep_som_size=64 * 64, deep_map_shape=(64 * 64,), interpolate_kwargs={}):
@@ -99,6 +102,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
             elif type(key) is list:
                 # use full p(z)
                 assert (bins is not None)
+                # ##histogram_from_fullpz CURRENTLY UNDEFINED!
                 hist = histogram_from_fullpz(df, key, overlap_weighted=overlap_weighted_pzc, bin_edges=bins)
             hists.append(hist)
         except KeyError as e:
@@ -128,6 +132,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
         hists = hists[cells_keep]
 
     return hists
+
 
 def histogram(data, deep_data, key, cells, cell_weights, pcchat, overlap_weighted_pzc, deep_som_size=64 * 64, bins=None,
               individual_chat=False, interpolate_kwargs={}):
@@ -189,13 +194,14 @@ def histogram(data, deep_data, key, cells, cell_weights, pcchat, overlap_weighte
             hist = hist / normalization
         return hist
 
+
 def redshift_distributions_wide(data,
                                 deep_data,
                                 overlap_weighted_pchat,
                                 overlap_weighted_pzc,
                                 bins,
                                 pcchat,
-                                deep_som_size=64*64,
+                                deep_som_size=64 * 64,
                                 tomo_bins={},
                                 key='Z',
                                 force_assignment=True,
@@ -262,6 +268,7 @@ def redshift_distributions_wide(data,
         hists = np.array(hists)
         return hists
 
+
 def get_cell_weights(data, overlap_weighted, key):
     """Given data, get cell weights and indices
 
@@ -307,6 +314,7 @@ def get_cell_weights_wide(data, overlap_weighted_pchat, cell_key='cell_wide', fo
     #     data[cell_key] = self.assign_wide(data, **kwargs)
     return get_cell_weights(data, overlap_weighted_pchat, cell_key)
 
+
 def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
                         key_z='Z', key_cells_wide='cell_wide_unsheared'):
     # assign gals in redshift sample to bins
@@ -334,6 +342,7 @@ def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
 
     return tomo_bins_wide
 
+
 def tomo_bins_wide_2d(tomo_bins_wide_dict):
     tomo_bins_wide = tomo_bins_wide_dict.copy()
     for k in tomo_bins_wide:
@@ -342,6 +351,7 @@ def tomo_bins_wide_2d(tomo_bins_wide_dict):
         renorm = 1. / np.average(tomo_bins_wide[k][:, 1])
         tomo_bins_wide[k][:, 1] *= renorm  # renormalize so the mean weight is 1; important for bin conditioning
     return tomo_bins_wide
+
 
 def plot_nz(hists, zbins, outfile, xlimits=(0, 2), ylimits=(0, 3.25)):
     plt.figure(figsize=(16., 9.))
@@ -355,6 +365,7 @@ def plot_nz(hists, zbins, outfile, xlimits=(0, 2), ylimits=(0, 3.25)):
     plt.title('n(z)')
     plt.savefig(outfile)
     plt.close()
+
 
 class SOMPZInformer(CatInformer):
     """Inform stage for SOMPZEstimator
@@ -386,7 +397,7 @@ class SOMPZInformer(CatInformer):
                           set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
                           thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"))
 
-    #inputs = [('input_spec_data', TableHandle),
+    # inputs = [('input_spec_data', TableHandle),
     #          ('input_deep_data', TableHandle),
     #          ('input_wide_data', TableHandle),
     #          ]
@@ -394,10 +405,10 @@ class SOMPZInformer(CatInformer):
     inputs = [('input_deep_data', TableHandle),
               ('input_wide_data', TableHandle),
               ]
-    
+
     # outputs = [('model_som_deep', ModelHandle),
     #            ('model_som_wide', ModelHandle)]
-    ### outputs = [('model', ModelHandle)]
+    # ## outputs = [('model', ModelHandle)]
 
     def __init__(self, args, comm=None):
         """Init function, init config stuff
@@ -410,9 +421,9 @@ class SOMPZInformer(CatInformer):
         if self.config.deep_groupname:
             deep_data = self.get_data('input_deep_data')[self.config.deep_groupname]
         else:  # pragma: no cover
-        # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
+            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             deep_data = self.get_data('input_deep_data')
-        wide_data = self.get_data('input_wide_data')#[self.config.wide_groupname]
+        wide_data = self.get_data('input_wide_data')  # [self.config.wide_groupname]
         # spec_data = self.get_data('input_spec_data')
 
         num_inputs_deep = len(self.config.inputs_deep)
@@ -445,7 +456,6 @@ class SOMPZInformer(CatInformer):
                 wide_input[:, i] = wide_data[col]
                 wide_errs[:, i] = wide_data[errcol]
 
-
         # put a temporary threshold bit in. TODO fix this up later...
         if self.config.set_threshold_deep:
             truncation_value = 1e-2
@@ -471,7 +481,7 @@ class SOMPZInformer(CatInformer):
                                      shape=self.config.som_shape_deep, minError=self.config.som_minerror_deep,
                                      wrap=self.config.som_wrap_deep, logF=self.config.som_take_log_deep)
         print(f"Training wide SOM of shape {self.config.som_shape_wide}...")
-        learn_func = somfuncs.hFunc(ngal_wide, sigma=(30,1))
+        learn_func = somfuncs.hFunc(ngal_wide, sigma=(30, 1))
         wide_som = somfuncs.NoiseSOM(sommetric, wide_input, wide_errs, learn_func,
                                      shape=self.config.som_shape_wide, minError=self.config.som_minerror_wide,
                                      wrap=self.config.som_wrap_wide, logF=self.config.som_take_log_wide)
@@ -484,15 +494,16 @@ class SOMPZInformer(CatInformer):
         self.add_data('model', self.model)
 
     def inform(self, input_deep_data, input_wide_data):
-        #self.add_data('input_spec_data', input_spec_data)
+        # self.add_data('input_spec_data', input_spec_data)
         self.set_data('input_deep_data', input_deep_data)
         self.set_data('input_wide_data', input_wide_data)
-        
+
         self.run()
         self.finalize()
 
         return self.model
-        
+
+
 class SOMPZEstimator(CatEstimator):
     """CatEstimator subclass to compute redshift PDFs for SOMPZ
     """
@@ -505,6 +516,7 @@ class SOMPZEstimator(CatEstimator):
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
                           deep_groupname=Param(str, "photometry", msg="hdf5_groupname for deep data"),
                           wide_groupname=Param(str, "photometry", msg="hdf5_groupname for wide data"),
+                          specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           inputs_deep=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           input_errs_deep=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for deep data"),
                           inputs_wide=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for wide data"),
@@ -527,10 +539,10 @@ class SOMPZEstimator(CatEstimator):
                           set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
                           thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"))
 
-    inputs = [('model' , ModelHandle),
-              ('spec_data' , TableHandle),
-              ('balrog_data' , TableHandle),
-              ('wide_data' , TableHandle), ]
+    inputs = [('model', ModelHandle),
+              ('spec_data', TableHandle),
+              ('balrog_data', TableHandle),
+              ('wide_data', TableHandle), ]
     outputs = [('nz', QPHandle),
                ('spec_data_deep_assignment', Hdf5Handle),
                ('balrog_data_deep_assignment', Hdf5Handle),
@@ -539,7 +551,7 @@ class SOMPZEstimator(CatEstimator):
                ('pz_chat', Hdf5Handle),
                ('pc_chat', Hdf5Handle),
                ]
-    
+
     def __init__(self, args, comm=None):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
         """
@@ -567,7 +579,7 @@ class SOMPZEstimator(CatEstimator):
         if self.config.ref_band_wide not in self.config.wide_bands:  # pragma: no cover
             raise ValueError(f"reference band not found in wide_bands specified in wide_bands: {str(self.config.wide_bands)}")
 
-        self.model = self.open_model(**self.config) # None
+        self.model = self.open_model(**self.config)  # None
         print('initialized model', self.model)
 
     def _assign_som(self, flux, flux_err, somstr):
@@ -575,19 +587,19 @@ class SOMPZEstimator(CatEstimator):
             som_dim = self.config.som_shape_deep[0]
         elif somstr == 'wide':
             som_dim = self.config.som_shape_wide[0]
-            
-        output_path = './' # TODO make kwarg
+
+        # output_path = './'  # TODO make kwarg
         nTrain = flux.shape[0]
-        #som_weights = np.load(infile_som, allow_pickle=True)
+        # som_weights = np.load(infile_som, allow_pickle=True)
         som_weights = self.model[somstr + '_som'].weights
         hh = somfuncs.hFunc(nTrain, sigma=(30, 1))
         metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         som = somfuncs.NoiseSOM(metric, None, None,
-                          learning=hh,
-                          shape=(som_dim, som_dim),
-                          wrap=False, logF=True,
-                          initialize=som_weights,
-                          minError=0.02)
+                                learning=hh,
+                                shape=(som_dim, som_dim),
+                                wrap=False, logF=True,
+                                initialize=som_weights,
+                                minError=0.02)
         subsamp = 1
 
         # Now we classify the objects into cells and save these cells
@@ -597,30 +609,35 @@ class SOMPZEstimator(CatEstimator):
         # np.savez(outfile, cells=cells_test, dist=dist_test)
 
         return cells_test, dist_test
-    
+
     def _estimate_pdf(self,):
-        zbins  = np.arange(self.config.zbins_min - self.config.zbins_dz/2.,
-                           self.config.zbins_max + self.config.zbins_dz,
-                           self.config.zbins_dz)
-        self.bincents = 0.5*(zbins[1:] + zbins[:-1])
+        zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2.,
+                          self.config.zbins_max + self.config.zbins_dz,
+                          self.config.zbins_dz)
+        self.bincents = 0.5 * (zbins[1:] + zbins[:-1])
         # TODO: improve file i/o
         # output_path = './'
         deep_som_size = np.product(self.model['deep_som'].shape)
         wide_som_size = np.product(self.model['wide_som'].shape)
-        
+
         all_deep_cells = np.arange(deep_som_size)
-        key = 'specz_redshift'
+        # key = 'specz_redshift'
+        key = self.config.specz_name
 
         spec_data = self.get_data('spec_data')
         balrog_data = self.get_data('balrog_data')
         wide_data = self.get_data('wide_data')
 
         cell_deep_spec_data = self.deep_assignment['spec_data'][0]
-        cell_wide_spec_data = self.wide_assignment['spec_data'][0]        
-        spec_data_for_pz = pd.DataFrame({key : spec_data[key].byteswap().newbyteorder(), # this may need to be changed for production
-                                         'cell_deep' : cell_deep_spec_data,
-                                         'cell_wide' : cell_wide_spec_data})
-        pz_c = np.array(get_deep_histograms(None, # this arg apparently doesn't matter.self.deep_assignment['balrog_data'][0],
+        cell_wide_spec_data = self.wide_assignment['spec_data'][0]
+        # spec_data_for_pz = pd.DataFrame({key : spec_data[key].byteswap().newbyteorder(), # this may need to be changed for production
+        #                                 'cell_deep' : cell_deep_spec_data,
+        #                                 'cell_wide' : cell_wide_spec_data})
+        # TAKE OUT THE ABOVE BYTESWAP, shouldn't be necessary for hdf5 data
+        spec_data_for_pz = pd.DataFrame({key: spec_data[key],
+                                         'cell_deep': cell_deep_spec_data,
+                                         'cell_wide': cell_wide_spec_data})
+        pz_c = np.array(get_deep_histograms(None,  # this arg apparently doesn't matter.self.deep_assignment['balrog_data'][0],
                                             spec_data_for_pz,
                                             key=key,
                                             cells=all_deep_cells,
@@ -630,71 +647,76 @@ class SOMPZEstimator(CatEstimator):
         # np.savez(output_path + 'pzc.npy', pz_c=pz_c)
 
         # TODO: compute p(c|chat), transfer function
-        #cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
+        # cm = cm.calculate_pcchat(balrog_data, w, force_assignment=False, wide_cell_key='cell_wide_unsheared')
+        # pc_chat = calculate_pcchat(deep_som_size,
+        #                           wide_som_size,
+        #                           self.deep_assignment['balrog_data'][0],#balrog_data['cell_deep'],#.values,
+        #                           self.wide_assignment['balrog_data'][0],#balrog_data['cell_wide'],#.values,
+        #                           np.ones(len(balrog_data)))#balrog_data['overlap_weight'].values)
+        # The above has problems when using hdf5 data, see change below
         pc_chat = calculate_pcchat(deep_som_size,
                                    wide_som_size,
-                                   self.deep_assignment['balrog_data'][0],#balrog_data['cell_deep'],#.values,
-                                   self.wide_assignment['balrog_data'][0],#balrog_data['cell_wide'],#.values,       
-                                   np.ones(len(balrog_data)))#balrog_data['overlap_weight'].values)
+                                   self.deep_assignment['balrog_data'][0],  # balrog_data['cell_deep'],#.values,
+                                   self.wide_assignment['balrog_data'][0],  # balrog_data['cell_wide'],#.values,
+                                   np.ones(len(balrog_data[self.config.specz_name])))
         pcchatdict = dict(pc_chat=pc_chat)
         self.add_data('pc_chat', pcchatdict)
         # use to write pc_chat out to file, leave in temporarily for cross checks
         # outfile = os.path.join(output_path, 'pcchat.npy')
         # np.savez(outfile, pc_chat=pc_chat)
 
-        
         # TODO: compute p(chat), occupation in wide SOM cells
         all_wide_cells = np.arange(wide_som_size)
         cell_wide_wide_data = self.wide_assignment['wide_data'][0]
-        wide_data_for_pz = pd.DataFrame({'cell_wide' : cell_wide_wide_data})
-        
-        #pdb.set_trace()
+        wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data})
+
+        # pdb.set_trace()
         pz_chat = np.array(histogram(wide_data_for_pz,
                                      spec_data_for_pz,
                                      key=key,
-                                     pcchat = pc_chat,
-                                     cells=all_wide_cells, 
+                                     pcchat=pc_chat,
+                                     cells=all_wide_cells,
                                      cell_weights=np.ones(len(all_wide_cells)),
                                      deep_som_size=deep_som_size,
                                      overlap_weighted_pzc=False,
-                                     bins=zbins, 
+                                     bins=zbins,
                                      individual_chat=True))
         # note: used to write out pz_chat to np, leave in temporarily for cross-checks
         # outfile = os.path.join(output_path, 'pzchat.npy')
         # np.savez(outfile, pz_chat=pz_chat)
         pzchatdict = dict(pz_chat=pz_chat)
         self.add_data('pz_chat', pzchatdict)
-        
+
         # TODO: compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
         # assign sample to tomographic bins
         # bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # TODO make this a config input
-        n_bins = len(self.config.bin_edges) - 1
+        # n_bins = len(self.config.bin_edges) - 1
         tomo_bins_wide_dict = bin_assignment_spec(spec_data_for_pz,
                                                   deep_som_size,
                                                   wide_som_size,
-                                                  bin_edges = self.config.bin_edges,
-                                                  key_z = key,
+                                                  bin_edges=self.config.bin_edges,
+                                                  key_z=key,
                                                   key_cells_wide='cell_wide')
 
-        cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
-        bin_occupation_info = {'bin' + str(i) : np.sum(cell_occupation_info.loc[tomo_bins_wide_dict[i]].values) for i in range(n_bins)}
+        # cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
+        # bin_occupation_info = {'bin' + str(i) : np.sum(cell_occupation_info.loc[tomo_bins_wide_dict[i]].values) for i in range(n_bins)}
         # print(bin_occupation_info)
 
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
         # calculate n(z)
-        nz = redshift_distributions_wide(data = wide_data_for_pz,
-                                         deep_data = spec_data_for_pz,
-                                         overlap_weighted_pchat = False,
-                                         overlap_weighted_pzc = False, 
-                                         bins = zbins,
+        nz = redshift_distributions_wide(data=wide_data_for_pz,
+                                         deep_data=spec_data_for_pz,
+                                         overlap_weighted_pchat=False,
+                                         overlap_weighted_pzc=False,
+                                         bins=zbins,
                                          deep_som_size=deep_som_size,
-                                         pcchat = pc_chat,
-                                         tomo_bins = tomo_bins_wide,
-                                         key = key,
-                                         force_assignment = False,
-                                         cell_key = 'cell_wide')
+                                         pcchat=pc_chat,
+                                         tomo_bins=tomo_bins_wide,
+                                         key=key,
+                                         force_assignment=False,
+                                         cell_key='cell_wide')
 
-        keylabel = 'test'
+        # keylabel = 'test'
         # take out numpy savez
         # outfile = os.path.join(output_path, 'hists_wide_NOT_BIN_CONDITIONALIZED_{}.npy'.format(keylabel))
         # np.save(outfile, nz)
@@ -712,13 +734,12 @@ class SOMPZEstimator(CatEstimator):
         """
         Run SOMPZ on a chunk of data
         """
-        #TODO
 
     def run(self,):
         spec_data = self.get_data("spec_data")
         balrog_data = self.get_data("balrog_data")
         wide_data = self.get_data("wide_data")
-        
+
         samples = [spec_data, balrog_data, wide_data]
         # NOTE: DO NOT CHANGE NAMES OF 'labels' below! They are used
         # in the naming of the outputs of the stage!
@@ -733,20 +754,46 @@ class SOMPZEstimator(CatEstimator):
         for i, (data, label) in enumerate(zip(samples, labels)):
             if i <= 1:
                 # print(self.config.deep_bands)
-                data_deep = data[self.config.deep_bands]
-                data_deep_ndarray = np.array(data_deep,copy=False)
-                flux_deep = data_deep_ndarray.view((np.float32,
-                                                    len(self.config.deep_bands)))
+                # #######
+                #  REDO how subset of data is copied so that it works for hdf5
+                # data_deep = data[self.config.deep_bands]
+                # data_deep_ndarray = np.array(data_deep,copy=False)
+                # Flux_deep = data_deep_ndarray.view((np.float32,
+                #                                    len(self.config.deep_bands)))
+                ngal_deep = len(data[self.config.deep_bands[0]])
+                num_inputs_deep = len(self.config.deep_bands)
+                data_deep = np.zeros([ngal_deep, num_inputs_deep])
+                data_err_deep = np.zeros([ngal_deep, num_inputs_deep])
+                for j, (col, errcol) in enumerate(zip(self.config.deep_bands, self.config.err_deep_bands)):
+                    if self.config.convert_to_flux_deep:
+                        data_deep[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_deep[j])
+                        data_err_deep[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_deep[:, j])
+                    else:
+                        data_deep[:, j] = np.array(data[col], dtype=np.float32)
+                        data_err_deep[:, j] = np.array(data[errcol], dtype=np.float32)
 
-                data_deep = data[self.config.err_deep_bands]
-                data_deep_ndarray = np.array(data_deep,copy=False)
-                flux_err_deep = data_deep_ndarray.view((np.float32,
-                                                    len(self.config.err_deep_bands)))
+                # ### TRY PUTTING IN THRESHOLD FROM INFORM!
+                if self.config.set_threshold_deep:
+                    truncation_value = self.config.thresh_val_deep
+                    for j in range(num_inputs_deep):
+                        mask = (data_deep[:, j] < self.config.thresh_val_deep)
+                        data_deep[:, j][mask] = truncation_value
+                        errmask = (data_err_deep[:, j] < self.config.thresh_val_deep)
+                        data_err_deep[:, j][errmask] = truncation_value
 
+                data_deep_ndarray = np.array(data_deep, copy=False)
+                flux_deep = data_deep_ndarray.view()
+
+                # data_deep = data[self.config.err_deep_bands]
+                # data_deep_ndarray = np.array(data_deep,copy=False)
+                # flux_err_deep = data_deep_ndarray.view((np.float32,
+                #                                         len(self.config.err_deep_bands)))
+                data_err_deep_ndarray = np.array(data_err_deep, copy=False)
+                flux_err_deep = data_err_deep_ndarray.view()
                 cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
 
                 self.deep_assignment[label] = (cells_deep, dist_deep)
-                # take out numpy savez 
+                # take out numpy savez
                 # outfile = os.path.join(output_path, label + '_deep.npz')
                 # np.savez(outfile, cells=cells_deep, dist=dist_deep)
                 tmpdict = dict(cells=cells_deep, dist=dist_deep)
@@ -754,26 +801,47 @@ class SOMPZEstimator(CatEstimator):
                 self.add_data(outlabel, tmpdict)
             else:
                 cells_deep, dist_deep = None, None
-                
-            data_wide = data[self.config.wide_bands]
-            data_wide_ndarray = np.array(data_wide,copy=False)
-            flux_wide = data_wide_ndarray.view((np.float32,
-                                                len(self.config.wide_bands)))
 
-            data_wide = data[self.config.err_wide_bands]
-            data_wide_ndarray = np.array(data_wide,copy=False)
-            flux_err_wide = data_wide_ndarray.view((np.float32,
-                                                len(self.config.err_wide_bands)))
-            
+            # data_wide = data[self.config.wide_bands]
+            # data_wide_ndarray = np.array(data_wide,copy=False)
+            # flux_wide = data_wide_ndarray.view((np.float32,
+            #                                    len(self.config.wide_bands)))
+            ngal_wide = len(data[self.config.wide_bands[0]])
+            num_inputs_wide = len(self.config.wide_bands)
+            data_wide = np.zeros([ngal_wide, num_inputs_wide])
+            data_err_wide = np.zeros([ngal_wide, num_inputs_wide])
+            for j, (col, errcol) in enumerate(zip(self.config.wide_bands, self.config.err_wide_bands)):
+                if self.config.convert_to_flux_wide:
+                    data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_wide[j])
+                    data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
+                else:
+                    data_wide[:, j] = np.array(data[col], dtype=np.float32)
+                    data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
+
+            # ## PUT IN THRESHOLD!
+            if self.config.set_threshold_wide:
+                truncation_value = self.config.thresh_value_wide
+                for j in range(num_inputs_wide):
+                    mask = (data_wide[:, j] < self.config.thresh_val_wide)
+                    data_wide[:, j][mask] = truncation_value
+                    errmask = (data_err_wide[:, j] < self.config.thresh_val_wide)
+                    data_err_wide[:, j][errmask] = truncation_value
+
+            # data_wide = data[self.config.err_wide_bands]
+            data_wide_ndarray = np.array(data_wide, copy=False)
+            flux_wide = data_wide_ndarray.view()
+            data_err_wide_ndarray = np.array(data_err_wide, copy=False)
+            flux_err_wide = data_err_wide_ndarray.view()
+
             cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
             self.wide_assignment[label] = (cells_wide, dist_wide)
-            if i>1:
+            if i > 1:
                 widedict = dict(cells=cells_wide, dist=dist_wide)
                 widelabel = f"{label}_assignment"
                 self.add_data(widelabel, widedict)
 
-            ### save cells_deep, dist_deep, cells_wide, dist_wide to disk
+            # ## save cells_deep, dist_deep, cells_wide, dist_wide to disk
             '''
             outfile = os.path.join(output_path, label +  '_wide.npz')
             np.savez(outfile, cells=cells_wide, dist=dist_wide)
@@ -782,18 +850,18 @@ class SOMPZEstimator(CatEstimator):
             print('write ' + outfile)
 
             names = [name for name in data.colnames if len(data[name].shape) <= 1]
-            df_out = data[names].to_pandas()            
+            df_out = data[names].to_pandas()
             df_out.to_hdf(outfile, key=label)
             #fits.writeto(outfile, data.as_array(), overwrite=True)
             '''
-        pz_c, pc_chat, nz = self._estimate_pdf() # *samples
+        pz_c, pc_chat, nz = self._estimate_pdf()  # *samples
         # self.nz = nz
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
 
         pzcdict = dict(pz_c=pz_c)
-        self.add_data('pz_c', pzcdict) # wide_data_cells_wide)
-        
+        self.add_data('pz_c', pzcdict)  # wide_data_cells_wide)
+
     def estimate(self,
                  spec_data,
                  balrog_data,
@@ -802,9 +870,9 @@ class SOMPZEstimator(CatEstimator):
         self.set_data("spec_data", spec_data)
         self.set_data("balrog_data", balrog_data)
         self.set_data("wide_data", wide_data)
-        
+
         self.run()
         # pdb.set_trace()
-        self.finalize() # TODO enable file i/o to handle this
+        self.finalize()  # TODO enable file i/o to handle this
 
-        return #self.model
+        return  # self.model
