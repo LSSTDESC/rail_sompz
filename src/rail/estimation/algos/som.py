@@ -315,10 +315,12 @@ class AsinhMetric:
         lnScaleStep: step size in ln(scale) used when integrating over scale
         """
         if lnScaleSigma > 0.:
-            # Create an array of scale factors and distance-sq to the
+            # Create an array of scale factors (s) and distance-sq (sPenalty) to the
             # center of the fuzzy template
+            # nS is the number of scale factors
             nS = int(np.ceil(maxSigma * lnScaleSigma / lnScaleStep))
-            lnS = np.linspace(-maxSigma * lnScaleSigma, 3. * lnScaleSigma, nS)
+            # lnS is the natural log of the scale factors
+            lnS = np.linspace(-maxSigma * lnScaleSigma, maxSigma * lnScaleSigma, nS)
             self.s = np.exp(lnS)
             self.sPenalty = (lnS / lnScaleSigma) ** 2
         else:
@@ -337,54 +339,75 @@ class AsinhMetric:
             vf = (features / errors).reshape(1, features.shape[0])
             ee = errors.reshape(vf.shape)
         elif len(features.shape) == 2:
+            # vf is the S/N of the features, with shape (nTargets, nFeatures)
+            # vf: see Eqn A3 of Sanchez+2020
+            # ee: see Eqn A2 of Sanchez+2020
             vf = features / errors
             ee = errors
-            # vf is S/N of the features, with shape (nTargets,nFeatures)
+            
         else:
             raise ValueError('Metric features has invalid dimensions')
+
+        # vn is the S/N of the cells, with shape (nCells, nTargets, nFeatures)
+        # vn: see Eqn A4 of Sanchez+2020
         vn = cells[:, np.newaxis, :] / ee[np.newaxis, :, :]
-        # And vn is cell S/N with shape (nCells,nTargets, nFeatures)
+        
 
         # Here is our rescaling function:
-        sum = np.zeros((vn.shape[0], vn.shape[1]), dtype=float)
+        # sum = np.zeros((vn.shape[0], vn.shape[1]), dtype=float)
 
         # Consider a range of rescaling options for the cells
         # and return the one with least distance.
         # Break the cells into bunches to avoid super-large 4d arrays
 
         chunk = 512
-        # Here is the destination array for the results
+        # dsq is the destination array for the results (distance-squared)
         dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
+        # df is the asinh of the galaxy S/N values
+        # df: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{ib}
         df = np.arcsinh(vf)
-        # weight for asinh vs geometric mean metrics
+
+        # w is the weight for asinh vs geometric mean metrics
+        # w: see Eqn A5 of Sanchez+2020
         w = np.minimum(np.exp(2 * (vf - 4)), 1000.)
         if np.any(np.isinf(w)):
+            #pdb.set_trace()
             print('inf in w at', np.where(np.isinf(w)))
         if np.any(np.isnan(w)):
+            #pdb.set_trace()
             print('nan in w at', np.where(np.isnan(w)))
 
+        # h: see Eqn A6 of Sanchez+2020. Appears as (1+nu_{ib}^2)
         h = np.hypot(1, vf)
         for first in range(0, vn.shape[0], chunk):
             last = min(first + chunk, vn.shape[0])
-            # Create rescaled cells, shape=(nS,nCells,nTargets,nFeatures)
+            # vnS is the re-scaled S/N of the cells, shape=(nS,nCells,nTargets,nFeatures)
+            # vnS: see the paragraph containing equation A7 of Sanchez+2020
             vnS = self.s[:, np.newaxis, np.newaxis, np.newaxis] * vn[first:last, :]
+            
+            # dn is the asinh of the cell S/N values
+            # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
             dn = np.arcsinh(vnS)
-            tmp = w * np.log(2 * vnS) + dn
+            
+            # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
+            numerator = dn + w * np.log(2 * vnS)
             ####
-            if np.any(np.isinf(tmp)):
-                print("inf tmp at", np.where(np.isinf(tmp)))
+            if np.any(np.isinf(numerator)):
+                #pdb.set_trace()
+                print("inf numerator at", np.where(np.isinf(numerator)))
                 print(np.any(np.isinf(w)),
                       np.any(np.isinf(vnS)),
                       np.any(np.isinf(dn)),
                       np.any(vnS <= 0))
-            if np.any(np.isnan(tmp)):
-                print("nan tmp at", np.where(np.isnan(tmp)))
+            if np.any(np.isnan(numerator)):
+                #pdb.set_trace()
+                print("nan numerator at", np.where(np.isnan(numerator)))
                 print(np.any(np.isnan(w)),
                       np.any(np.isnan(vnS)),
                       np.any(np.isnan(dn)),
                       np.any(vnS <= 0))
 
-            dn = tmp / (1 + w)
+            dn = numerator / (1 + w)
             d = (dn - df) * h
             dsq0 = np.sum(d * d, axis=3)  # Sum distance over features
             # Now add penalty for the scaling factor
@@ -394,7 +417,10 @@ class AsinhMetric:
 
         return dsq
 
-    def update(self, cells, fractions, features, errors):
+    def update(self, cells, fractions, features, errors, threshold=2.):
+        '''
+        threshold: minimum S/N for a modification of SOM cell weights. Default value is arbitrary.
+        '''
         if len(cells.shape) != 2:
             raise ValueError('Metric cells is wrong dimension')
         if len(fractions.shape) != 1 or fractions.shape[0] != cells.shape[0]:
@@ -412,7 +438,7 @@ class AsinhMetric:
 
         factor = np.maximum(1., vf) / vn
         # Don't move if there's no information at all
-        lowSN = np.maximum(vn, vf) < 2.  # Arbitrary choice of lower limits here
+        lowSN = np.maximum(vn, vf) < threshold 
         factor[lowSN] = 1.
 
         cells *= np.power(factor, fractions[:, np.newaxis])
