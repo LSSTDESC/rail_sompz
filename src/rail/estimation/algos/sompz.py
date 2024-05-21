@@ -458,7 +458,11 @@ class SOMPZInformer(CatInformer):
         else:  # pragma: no cover
             # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             deep_data = self.get_data('input_deep_data')
-        wide_data = self.get_data('input_wide_data')  # [self.config.wide_groupname]
+        if self.config.wide_groupname:
+            wide_data = self.get_data('input_wide_data')[self.config.wide_groupname]
+        else:  # pragma: no cover
+            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
+            wide_data = self.get_data('input_wide_data')            
         # spec_data = self.get_data('input_spec_data')
 
         num_inputs_deep = len(self.config.inputs_deep)
