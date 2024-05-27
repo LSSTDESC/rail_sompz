@@ -1,4 +1,8 @@
+*.npz
+*.pkl
 *.py~
+*.DS_Store
+misc/
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
