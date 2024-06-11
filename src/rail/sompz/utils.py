@@ -34,3 +34,12 @@ def luptize(flux, var, s, zp):
     lupt = mu0 - a * np.arcsinh(flux / (2 * b))
     lupt_var = a ** 2 * var / ((2 * b) ** 2 + flux ** 2)
     return lupt, lupt_var
+
+def selection_wl_cardinal(mag_i, mag_r, mag_r_limit, size, psf_r=0.9, imag_max=25.1):
+    select_mag_i = mag_i < imag_max
+    select_mag_r = mag_r < -2.5 * np.log10(0.5) + mag_r_limit
+    select_psf_r = np.sqrt(size**2  + (0.13 * psf_r)**2) > 0.1625 * psf_r
+
+    select = select_mag_i & select_mag_r & select_psf_r
+
+    return select
