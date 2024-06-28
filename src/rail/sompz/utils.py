@@ -3,6 +3,8 @@
 import os
 from rail import sompz
 
+import numpy as np
+
 RAIL_SOMPZ_DIR = os.path.abspath(os.path.join(os.path.dirname(sompz.__file__), '..', '..'))
 
 def mag2flux(mag, zero_pt=30):
@@ -34,3 +36,33 @@ def luptize(flux, var, s, zp):
     lupt = mu0 - a * np.arcsinh(flux / (2 * b))
     lupt_var = a ** 2 * var / ((2 * b) ** 2 + flux ** 2)
     return lupt, lupt_var
+
+def mean_of_hist(y, bins): # n=1
+    """Given a histogram and its bins return the mean
+    of the distribution.
+    Parameters
+    ----------
+    y :     A histogram of values
+    bins :  The bins of the histogram
+    Returns
+    -------
+    normalization, mean, sigma
+    """
+    dx = np.diff(bins)
+    x = 0.5 * (bins[1:] + bins[:-1])
+    normalization = np.trapz(y, x=x, dx=dx)
+    mean = np.trapz(x * y, x=x, dx=dx) / normalization
+    result = mean
+    #var = np.trapz((x - mean) ** 2 * y, x=x, dx=dx) / normalization
+    #sigma = np.sqrt(var)
+    return result
+
+def selection_wl_cardinal(mag_i, mag_r, mag_r_limit, size,
+                          psf_r=0.9, imag_max=25.1):
+    select_mag_i = mag_i < imag_max
+    select_mag_r = mag_r < -2.5 * np.log10(0.5) + mag_r_limit
+    select_psf_r = np.sqrt(size**2  + (0.13 * psf_r)**2) > 0.1625 * psf_r
+
+    select = select_mag_i & select_mag_r & select_psf_r
+
+    return select
