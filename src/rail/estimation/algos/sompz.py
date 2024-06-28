@@ -553,6 +553,7 @@ class SOMPZEstimator(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+#                          data_path=Param(str, "directory", msg="directory for output files"),
                           spec_groupname=Param(str, "photometry", msg="hdf5_groupname for spec_data"),
                           balrog_groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
                           wide_groupname=Param(str, "photometry", msg="hdf5_groupname for wide_data"),
@@ -586,7 +587,9 @@ class SOMPZEstimator(CatEstimator):
               ('wide_data', TableHandle), ]
     outputs = [('nz', QPHandle),
                ('spec_data_deep_assignment', Hdf5Handle),
+               ('spec_data_wide_assignment', Hdf5Handle),               
                ('balrog_data_deep_assignment', Hdf5Handle),
+               ('balrog_data_wide_assignment', Hdf5Handle),               
                ('wide_data_assignment', Hdf5Handle),
                ('pz_c', Hdf5Handle),
                ('pz_chat', Hdf5Handle),
@@ -599,19 +602,19 @@ class SOMPZEstimator(CatEstimator):
         """
         CatEstimator.__init__(self, args, comm=comm)
 
-        # I don't think that this is ever actually used, so I'm commenting out
-        # but, I'm leaving it in just in case I'm wrong and it is necessary
-        #datapath = self.config["data_path"]
-        #if datapath is None or datapath == "None":
-        #    tmpdatapath = os.path.join(RAILDIR, "rail/examples_data/estimation_data/data")
-        #    os.environ["SOMPZDATAPATH"] = tmpdatapath
-        #    self.data_path = tmpdatapath
-        #else:  # pragma: no cover
-        #    self.data_path = datapath
-        #    os.environ["SOMPZDATAPATH"] = self.data_path
-        #if not os.path.exists(self.data_path):  # pragma: no cover
-        #    raise FileNotFoundError("SOMPZDATAPATH " + self.data_path + " does not exist! Check value of data_path in config file!")
-
+        '''
+        datapath = self.config["data_path"]
+        if datapath is None or datapath == "None":
+            tmpdatapath = os.path.join(RAILDIR, "rail/examples_data/estimation_data/data")
+            os.environ["SOMPZDATAPATH"] = tmpdatapath
+            self.data_path = tmpdatapath
+        else:  # pragma: no cover
+            self.data_path = datapath
+            os.environ["SOMPZDATAPATH"] = self.data_path
+        if not os.path.exists(self.data_path):  # pragma: no cover
+            raise FileNotFoundError("SOMPZDATAPATH " + self.data_path + " does not exist! Check value of data_path in config file!")
+        '''
+        
         # check on bands, errs, and prior band
         if len(self.config.inputs_deep) != len(self.config.input_errs_deep):  # pragma: no cover
             raise ValueError("Number of inputs_deep specified in inputs_deep must be equal to number of mag errors specified in input_errs_deep!")
@@ -840,9 +843,7 @@ class SOMPZEstimator(CatEstimator):
         labels = ['spec_data', 'balrog_data', 'wide_data']
         # output_path = './' # make kwarg
         # assign samples to SOMs
-        # TODO: put repeated code into functions
         # TODO: handle case of sample already having been assigned
-        # TODO: handle file i/o better
         self.deep_assignment = {}
         self.wide_assignment = {}
         for i, (data, label) in enumerate(zip(samples, labels)):
@@ -930,10 +931,10 @@ class SOMPZEstimator(CatEstimator):
             cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
             self.wide_assignment[label] = (cells_wide, dist_wide)
-            if i > 1:
-                self.widedict = dict(cells=cells_wide, dist=dist_wide)
-                widelabel = f"{label}_assignment"
-                self.add_data(widelabel, self.widedict)
+            #if i > 1:
+            self.widedict = dict(cells=cells_wide, dist=dist_wide)
+            widelabel = f"{label}_assignment"
+            self.add_data(widelabel, self.widedict)
 
             # ## save cells_deep, dist_deep, cells_wide, dist_wide to disk
             '''
