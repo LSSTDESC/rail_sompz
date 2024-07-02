@@ -931,9 +931,11 @@ class SOMPZEstimator(CatEstimator):
             cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
             self.wide_assignment[label] = (cells_wide, dist_wide)
-            #if i > 1:
+            if i > 1:
+                widelabel = f"{label}_assignment"
+            else:
+                widelabel = f"{label}_wide_assignment"
             self.widedict = dict(cells=cells_wide, dist=dist_wide)
-            widelabel = f"{label}_assignment"
             self.add_data(widelabel, self.widedict)
 
             # ## save cells_deep, dist_deep, cells_wide, dist_wide to disk
