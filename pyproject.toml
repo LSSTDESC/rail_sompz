@@ -16,7 +16,7 @@ classifiers = [
 dynamic = ["version"]
 
 dependencies = [
-    "pz-rail-base",
+    "ceci2 @ https://github.com/LSSTDESC/rail_base",
     "qp-prob[full]",
 ]
 

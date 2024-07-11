@@ -17,7 +17,7 @@ dynamic = ["version"]
 
 dependencies = [
     "desc-bpz",
-    "pz-rail-base",
+    "ceci2 @ https://github.com/LSSTDESC/rail_base",
     "qp-prob[full]",
 ]
 
