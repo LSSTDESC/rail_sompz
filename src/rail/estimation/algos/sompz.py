@@ -445,11 +445,6 @@ class SOMPZInformer(CatInformer):
     #            ('model_som_wide', ModelHandle)]
     # ## outputs = [('model', ModelHandle)]
 
-    def __init__(self, args, comm=None):
-        """Init function, init config stuff
-        """
-        CatInformer.__init__(self, args, comm=comm)
-
     def run(self):
 
         # note: hdf5_groupname is a SHARED_PARAM defined in the parent class!
@@ -593,10 +588,10 @@ class SOMPZEstimator(CatEstimator):
                ('pc_chat', Hdf5Handle),
                ]
 
-    def __init__(self, args, comm=None):
+    def __init__(self, args, **kwargs):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
         """
-        CatEstimator.__init__(self, args, comm=comm)
+        super().__init__(self, args, **kwargs)
 
         datapath = self.config["data_path"]
         if datapath is None or datapath == "None":
