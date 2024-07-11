@@ -591,7 +591,7 @@ class SOMPZEstimator(CatEstimator):
     def __init__(self, args, **kwargs):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
         """
-        super().__init__(self, args, **kwargs)
+        super().__init__(args, **kwargs)
 
         datapath = self.config["data_path"]
         if datapath is None or datapath == "None":
