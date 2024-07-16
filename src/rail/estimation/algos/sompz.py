@@ -805,38 +805,88 @@ class SOMPZEstimator(CatEstimator):
         tmask_dict = dict(bin=tomo_bins, weight=tomo_weights)
         return tmask_dict
 
+    def _initialize_run(self):
+        """
+        code that gets run once
+        """
+        
+        self._output_handle = None
 
+    def _do_chunk_output(self):
+        """
+        code that gets run once
+        """
+        print('TODO')
+        assert False
+
+    def _finalize_run(self):
+        self._output_handle.finalize_write()
+        
     def _process_chunk(self, start, end, data, first):
         """
         Run SOMPZ on a chunk of data
         """
+        ngal_wide = len(data[self.config.inputs_wide[0]])
+        num_inputs_wide = len(self.config.inputs_wide)
+        data_wide = np.zeros([ngal_wide, num_inputs_wide])
+        data_err_wide = np.zeros([ngal_wide, num_inputs_wide])
+        for j, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
+            if self.config.convert_to_flux_wide:
+                data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_wide[j])
+                data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
+            else:
+                data_wide[:, j] = np.array(data[col], dtype=np.float32)
+                data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
 
+        if self.config.set_threshold_wide:
+            truncation_value = self.config.thresh_value_wide
+            for j in range(num_inputs_wide):
+                mask = (data_wide[:, j] < self.config.thresh_val_wide)
+                data_wide[:, j][mask] = truncation_value
+                errmask = (data_err_wide[:, j] < self.config.thresh_val_wide)
+                data_err_wide[:, j][errmask] = truncation_value
+
+        data_wide_ndarray = np.array(data_wide, copy=False)
+        flux_wide = data_wide_ndarray.view()
+        data_err_wide_ndarray = np.array(data_err_wide, copy=False)
+        flux_err_wide = data_err_wide_ndarray.view()
+
+        cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
+        print('TODO store this info')
+        output_handle = None
+        self._do_chunk_output(output_handle, start, end, first)
+        
     def run(self,):
-        # note: hdf5_groupname is a SHARED_PARAM defined in the parent class!
         if self.config.spec_groupname:
             spec_data = self.get_data('spec_data')[self.config.spec_groupname]
         else:  # pragma: no cover
-            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             spec_data = self.get_data('spec_data')
 
         if self.config.balrog_groupname:
             balrog_data = self.get_data('balrog_data')[self.config.balrog_groupname]
         else:  # pragma: no cover
-            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             balrog_data = self.get_data('balrog_data')
 
         if self.config.wide_groupname:
             wide_data = self.get_data('wide_data')[self.config.wide_groupname]
         else:  # pragma: no cover
-            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             wide_data = self.get_data('wide_data')            
-        # spec_data = self.get_data('spec_data')
 
-        if self.config.debug:
-            spec_data = spec_data[:2000]
-            balrog_data = balrog_data[:2000]
-            wide_data = wide_data[:2000]
-            
+        iterator = self.input_iterator("wide_data")
+        first = True
+        self._initialize_run() # TODO implement
+        self._output_handle = None # TODO consider handle for dict to store all outputs
+        for s, e, data_chunk in iterator:
+            if self.rank == 0:
+                print(f"Process {self.rank} running estimator on chunk {s} - {e}")
+            self._process_chunk(s, e, data_chunk, first)
+            first = False
+            gc.collect()
+
+        print('You need to do spec_data and balrog_data')
+        self._finalize_run()
+        assert False,'below this line is code that needs to be updated'
+        
         samples = [spec_data, balrog_data, wide_data]
         # NOTE: DO NOT CHANGE NAMES OF 'labels' below! They are used
         # in the naming of the outputs of the stage!
@@ -896,39 +946,6 @@ class SOMPZEstimator(CatEstimator):
                 self.add_data(outlabel, tmpdict)
             else:
                 cells_deep, dist_deep = None, None
-
-            # data_wide = data[self.config.inputs_wide]
-            # data_wide_ndarray = np.array(data_wide,copy=False)
-            # flux_wide = data_wide_ndarray.view((np.float32,
-            #                                    len(self.config.inputs_wide)))
-            ngal_wide = len(data[self.config.inputs_wide[0]])
-            num_inputs_wide = len(self.config.inputs_wide)
-            data_wide = np.zeros([ngal_wide, num_inputs_wide])
-            data_err_wide = np.zeros([ngal_wide, num_inputs_wide])
-            for j, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
-                if self.config.convert_to_flux_wide:
-                    data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_wide[j])
-                    data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
-                else:
-                    data_wide[:, j] = np.array(data[col], dtype=np.float32)
-                    data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
-
-            # ## PUT IN THRESHOLD!
-            if self.config.set_threshold_wide:
-                truncation_value = self.config.thresh_value_wide
-                for j in range(num_inputs_wide):
-                    mask = (data_wide[:, j] < self.config.thresh_val_wide)
-                    data_wide[:, j][mask] = truncation_value
-                    errmask = (data_err_wide[:, j] < self.config.thresh_val_wide)
-                    data_err_wide[:, j][errmask] = truncation_value
-
-            # data_wide = data[self.config.input_errs_wide]
-            data_wide_ndarray = np.array(data_wide, copy=False)
-            flux_wide = data_wide_ndarray.view()
-            data_err_wide_ndarray = np.array(data_err_wide, copy=False)
-            flux_err_wide = data_err_wide_ndarray.view()
-
-            cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
 
             self.wide_assignment[label] = (cells_wide, dist_wide)
             if i > 1:
