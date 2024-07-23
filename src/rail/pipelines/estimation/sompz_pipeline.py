@@ -80,7 +80,7 @@ class SOMPZPipeline(RailPipeline):
             connections=dict(
                 model=self.inform_sompz.io.model,
             ),
-            bin_edges=bin_edges
+            bin_edges=bin_edges,
             spec_groupname=spec_groupname,
             balrog_groupname=balrog_groupname,
             wide_groupname=wide_groupname,
