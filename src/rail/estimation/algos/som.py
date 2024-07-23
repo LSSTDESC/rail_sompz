@@ -204,7 +204,7 @@ class NoiseSOM:
             if first % 1000 == 0:
                 print("classifying", first)
             last = min(first + blocksize, nPts)
-            d = self.metric(self.weights, data[first:last], errors[first:last])
+            d = self.metric(np.where(np.isnan(self.weights), 1., self.weights), data[first:last], errors[first:last])
             bb = np.argmin(d, axis=0)
             bmu[first:last] = bb
             dsq[first:last] = d[bb, np.arange(d.shape[1])]
@@ -373,6 +373,7 @@ class AsinhMetric:
         if np.any(np.isinf(w)):
             #pdb.set_trace()
             print('inf in w at', np.where(np.isinf(w)))
+
         if np.any(np.isnan(w)):
             #pdb.set_trace()
             print('nan in w at', np.where(np.isnan(w)))
@@ -597,7 +598,8 @@ def somPlot2d(som):
     mags = 30. - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
-    ik = mags[:, 3] - mags[:, 7]
+    #ik = mags[:, 3] - mags[:, 7]
+    ik = mags[:, 3] - mags[:, 5]
     imag = mags[:, 3]
     fig = pl.figure(figsize=(6, 7))
     # First a color-color plot of nodes
@@ -660,7 +662,8 @@ def somDomainColors(som):
     mags = 30. - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
-    ik = mags[:, 3] - mags[:, 7]
+    #ik = mags[:, 3] - mags[:, 7]
+    ik = mags[:, 3] - mags[:, 5]
     imag = mags[:, 3]
     fig = pl.figure(figsize=(6, 7))
 

@@ -375,7 +375,7 @@ def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
     for i in range(nbins):
         tomo_bins_wide[i] = np.where(cell_bin_assignment == i)[0]
 
-    return tomo_bins_wide
+    return tomo_bins_wide, cell_bin_assignment
 
 
 def tomo_bins_wide_2d(tomo_bins_wide_dict):
@@ -416,8 +416,8 @@ class SOMPZInformer(CatInformer):
                           input_errs_wide=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for wide data"),
                           zero_points_deep=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for deep data, if needed"),
                           zero_points_wide=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for wide data, if needed"),
-                          som_shape_deep=Param(tuple, (32, 32), msg="shape for the deep som, must be a 2-element tuple"),
-                          som_shape_wide=Param(tuple, (32, 32), msg="shape for the wide som, must be a 2-element tuple"),
+                          som_shape_deep=Param(list, [32, 32], msg="shape for the deep som, must be a 2-element tuple"),
+                          som_shape_wide=Param(list, [32, 32], msg="shape for the wide som, must be a 2-element tuple"),
                           som_minerror_deep=Param(float, 0.01, msg="floor placed on observational error on each feature in deep som"),
                           som_minerror_wide=Param(float, 0.01, msg="floor placed on observational error on each feature in wide som"),
                           som_wrap_deep=Param(bool, False, msg="flag to set whether the deep SOM has periodic boundary conditions"),
@@ -515,6 +515,13 @@ class SOMPZInformer(CatInformer):
         sommetric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         learn_func = somfuncs.hFunc(ngal_deep, sigma=(30, 1))
 
+        
+        deep_input = np.where(np.isfinite(deep_input), deep_input, 30.)
+        deep_errs = np.where(np.isfinite(deep_errs), deep_errs, 1.)
+
+        wide_input = np.where(np.isfinite(wide_input), wide_input, 30.)
+        wide_errs = np.where(np.isfinite(wide_errs), wide_errs, 1.)
+        
         print(f"Training deep SOM of shape {self.config.som_shape_deep}...")
         deep_som = somfuncs.NoiseSOM(sommetric, deep_input, deep_errs, learn_func,
                                      shape=self.config.som_shape_deep, minError=self.config.som_minerror_deep,
@@ -563,8 +570,8 @@ class SOMPZEstimator(CatEstimator):
                           input_errs_wide=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for wide data"),
                           zero_points_deep=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for deep data, if needed"),
                           zero_points_wide=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for wide data, if needed"),
-                          som_shape_deep=Param(tuple, (32, 32), msg="shape for the deep som, must be a 2-element tuple"),
-                          som_shape_wide=Param(tuple, (32, 32), msg="shape for the wide som, must be a 2-element tuple"),
+                          som_shape_deep=Param(list, [32, 32], msg="shape for the deep som, must be a 2-element tuple"),
+                          som_shape_wide=Param(list, [32, 32], msg="shape for the wide som, must be a 2-element tuple"),
                           som_minerror_deep=Param(float, 0.01, msg="floor placed on observational error on each feature in deep som"),
                           som_minerror_wide=Param(float, 0.01, msg="floor placed on observational error on each feature in wide som"),
                           som_wrap_deep=Param(bool, False, msg="flag to set whether the deep SOM has periodic boundary conditions"),
@@ -588,6 +595,7 @@ class SOMPZEstimator(CatEstimator):
                ('spec_data_deep_assignment', Hdf5Handle),
                ('balrog_data_deep_assignment', Hdf5Handle),
                ('wide_data_assignment', Hdf5Handle),
+               ('tomo_bin_assignment', Hdf5Handle),
                ('pz_c', Hdf5Handle),
                ('pz_chat', Hdf5Handle),
                ('pc_chat', Hdf5Handle),
@@ -598,16 +606,16 @@ class SOMPZEstimator(CatEstimator):
         """
         CatEstimator.__init__(self, args, comm=comm)
 
-        datapath = self.config["data_path"]
-        if datapath is None or datapath == "None":
-            tmpdatapath = os.path.join(RAILDIR, "rail/examples_data/estimation_data/data")
-            os.environ["SOMPZDATAPATH"] = tmpdatapath
-            self.data_path = tmpdatapath
-        else:  # pragma: no cover
-            self.data_path = datapath
-            os.environ["SOMPZDATAPATH"] = self.data_path
-        if not os.path.exists(self.data_path):  # pragma: no cover
-            raise FileNotFoundError("SOMPZDATAPATH " + self.data_path + " does not exist! Check value of data_path in config file!")
+        #datapath = self.config["data_path"]
+        #if datapath is None or datapath == "None":
+        #    tmpdatapath = os.path.join(RAILDIR, "rail/examples_data/estimation_data/data")
+        #    os.environ["SOMPZDATAPATH"] = tmpdatapath
+        #    self.data_path = tmpdatapath
+        #else:  # pragma: no cover
+        #    self.data_path = datapath
+        #    os.environ["SOMPZDATAPATH"] = self.data_path
+        #if not os.path.exists(self.data_path):  # pragma: no cover
+        #    raise FileNotFoundError("SOMPZDATAPATH " + self.data_path + " does not exist! Check value of data_path in config file!")
 
         # check on bands, errs, and prior band
         if len(self.config.inputs_deep) != len(self.config.input_errs_deep):  # pragma: no cover
@@ -629,6 +637,10 @@ class SOMPZEstimator(CatEstimator):
         elif somstr == 'wide':
             som_dim = self.config.som_shape_wide[0]
 
+
+        flux = np.where(np.isfinite(flux), flux, 30.)
+        flux_err = np.where(np.isfinite(flux_err), flux_err, 1.)
+            
         # output_path = './'  # TODO make kwarg
         nTrain = flux.shape[0]
         # som_weights = np.load(infile_som, allow_pickle=True)
@@ -732,13 +744,17 @@ class SOMPZEstimator(CatEstimator):
         # assign sample to tomographic bins
         # bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # this is now a config input
         # n_bins = len(self.config.bin_edges) - 1
-        tomo_bins_wide_dict = bin_assignment_spec(spec_data_for_pz,
-                                                  deep_som_size,
-                                                  wide_som_size,
-                                                  bin_edges=self.config.bin_edges,
-                                                  key_z=key,
-                                                  key_cells_wide='cell_wide')
+        tomo_bins_wide_dict, cell_bin_assignment = bin_assignment_spec(
+            spec_data_for_pz,
+            deep_som_size,
+            wide_som_size,
+            bin_edges=self.config.bin_edges,
+            key_z=key,
+            key_cells_wide='cell_wide',
+        )
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
+
+        tomo_bin_assignement = cell_bin_assignment[cell_wide_wide_data]
         
         # compute number of galaxies per tomographic bin (diagnostic info)
         # cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
@@ -763,7 +779,7 @@ class SOMPZEstimator(CatEstimator):
                             pz_chat=pz_chat)
         self.model = self.model.update(model_update)
         '''
-        return pz_c, pc_chat, nz
+        return pz_c, pc_chat, nz, tomo_bin_assignement
 
     def _process_chunk(self, start, end, data, first):
         """
@@ -795,7 +811,7 @@ class SOMPZEstimator(CatEstimator):
             spec_data = spec_data[:2000]
             balrog_data = balrog_data[:2000]
             wide_data = wide_data[:2000]
-            
+
         samples = [spec_data, balrog_data, wide_data]
         # NOTE: DO NOT CHANGE NAMES OF 'labels' below! They are used
         # in the naming of the outputs of the stage!
@@ -846,6 +862,7 @@ class SOMPZEstimator(CatEstimator):
                 #                                         len(self.config.err_inputs_deep)))
                 data_err_deep_ndarray = np.array(data_err_deep, copy=False)
                 flux_err_deep = data_err_deep_ndarray.view()
+
                 cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
 
                 self.deep_assignment[label] = (cells_deep, dist_deep)
@@ -910,9 +927,11 @@ class SOMPZEstimator(CatEstimator):
             df_out.to_hdf(outfile, key=label)
             #fits.writeto(outfile, data.as_array(), overwrite=True)
             '''
-        pz_c, pc_chat, nz = self._estimate_pdf()  # *samples
+        pz_c, pc_chat, nz, tomo_bin_assignement = self._estimate_pdf()  # *samples
         # self.nz = nz
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
+        self.add_data('tomo_bin_assignment', dict(tomo_bin_assignment=tomo_bin_assignement))
+        
         self.add_data('nz', tomo_ens)
 
         pzcdict = dict(pz_c=pz_c)
@@ -932,12 +951,13 @@ class SOMPZEstimator(CatEstimator):
         self.finalize()
 
         output = {
-		'nz': self.get_handle("nz"),
-		'spec_data_deep_assignment': self.get_handle("spec_data_deep_assignment"),
-		'balrog_data_deep_assignment': self.get_handle("balrog_data_deep_assignment"),
-		'wide_data_assignment': self.get_handle("wide_data_assignment"), 
-		'pz_c': self.get_handle("pz_c"), 
-		'pz_chat': self.get_handle("pz_chat"), 
-		'pc_chat': self.get_handle("pc_chat"), 
-	}
+            'nz': self.get_handle("nz"),
+            'spec_data_deep_assignment': self.get_handle("spec_data_deep_assignment"),
+            'balrog_data_deep_assignment': self.get_handle("balrog_data_deep_assignment"),
+            'wide_data_assignment': self.get_handle("wide_data_assignment"), 
+            'tomo_bin_assignemt': self.get_handle("tomo_bin_assignment"),
+            'pz_c': self.get_handle("pz_c"), 
+            'pz_chat': self.get_handle("pz_chat"), 
+            'pc_chat': self.get_handle("pc_chat"),
+        }
         return output
