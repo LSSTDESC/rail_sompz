@@ -925,7 +925,12 @@ class SOMPZEstimator(CatEstimator):
         pz_c, pc_chat, nz, tomo_bin_assignement = self._estimate_pdf()  # *samples
         # self.nz = nz
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
-        self.add_data('tomo_bin_assignment', dict(tomo_bin_assignment=tomo_bin_assignement))
+
+        tomo_dict = dict(
+            row_index=np.arange(len(tomo_bin_assignement)),
+            class_id=tomo_bin_assignement,
+        )
+        self.add_data('tomo_bin_assignment', tomo_dict)
         
         self.add_data('nz', tomo_ens)
 
