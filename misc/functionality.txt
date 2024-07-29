@@ -1,0 +1,55 @@
+# functionality and code change proposals.
+# for use with deciding how to split tasks into RAIL Stages
+
+
+# I. refactor: 'get_deep_histograms' -> 'calculate_pzc'. 'calculate_pcchat' -> 'calculate_pc_chat'
+# II. wrap 'histogram' into 'calculate_pzchat'
+# III. refactor 'bin_assignment_spec' -> 'tomo_binning_via_spec_mode' or equivalent
+#      this naming convention 'tomo_binning_via_X' can be used for multiple binning procedures
+
+# IV. change _estimate_pdf
+#     refactor to clarify this is computing n(z), not p(z)
+#     proposal: '_estimate_pdf' -> '_estimate_nz'
+#     fit the following template
+
+def _estimate_pdf(pz_c, pc_chat, tomo_bins)
+
+# V. implement _prep_inference
+def _prep_inference(TODO):
+    pz_c = calculate_pz_c(...)
+    pc_chat = calculate pc_chat(...)
+    tomo_binning = tomo_binning_via_spec_X(...)
+    
+def calculate_pz_c(...):
+    ''' compute p(z|c, etc.) with spec_data table used to
+    populate deep SOM. See Eqn. 6
+    of Myles & Alarcon et al. For use with characterizing
+    uncertainty due to choice of spectroscopic calibration sample.
+    For possible use also with building a SOM per Deep Field.
+    '''
+    # refactor get_deep_histograms
+    return pz_c
+
+def calculate_pc_chat(...):
+    ''' compute p(c|chat, etc.) with balrog_data table used to
+    populate deep & wide SOMs. See
+    Eqn. 6 of Myles & Alarcon et al. For use with characterizing
+    uncertainty due to choice of using Balrog vs. deep-wide
+    photometric pairs, as described in Sec. 5.4
+    of Myles & Alarcon et al.
+    '''
+    # refactor calculate_pcchat
+    return pc_chat
+    return pc_chat
+
+# VI. Implement _estimate_nz function that works on individual
+# galaxy tomographic binning
+def _estimate_nz_fixed_per_gal_tomo_binning(tomo_assn_per_gal,
+chat_per_gal, pz_chat):
+    '''	derive n(z) given input per-galaxy tomographic binning
+    assignment. i.e., use p(z|chat, etc.) for each galaxy as a
+    per-galaxy photo-z with specified tomographic bins. For use
+    to compare SOMPZ to photo-z codes.
+    '''
+
+    return nz_qp
