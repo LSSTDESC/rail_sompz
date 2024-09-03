@@ -12,11 +12,24 @@ from rail.estimation.estimator import CatEstimator, CatInformer
 from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
 from rail.core.common_params import SHARED_PARAMS
+from multiprocessing import Pool
 
 # import astropy.io.fits as fits  # TODO handle file i/o with rail
 import pandas as pd
 import matplotlib.pyplot as plt
+import functools
 
+class Pickableclassify:
+    def __init__(self, som, flux, fluxerr, inds):
+        self.som = som 
+        self.flux = flux
+        self.inds = inds
+        self.flux_err = fluxerr
+    def __call__(self, ind):
+        cells_test, dist_test  = self.som.classify(self.flux[self.inds[ind]], self.flux_err[self.inds[ind]])
+        return cells_test, dist_test
+    
+        
 
 def_bands = ["u", "g", "r", "i", "z", "y"]
 default_bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0]
@@ -578,7 +591,7 @@ class SOMPZEstimator(CatEstimator):
     inputs = [('model', ModelHandle),
               ('spec_data', TableHandle),
               ('balrog_data', TableHandle),
-              ('wide_data', TableHandle), ]
+              ('wide_data', TableHandle)]
     outputs = [('nz', QPHandle),
                ('spec_data_deep_assignment', Hdf5Handle),
                ('balrog_data_deep_assignment', Hdf5Handle),
@@ -592,6 +605,11 @@ class SOMPZEstimator(CatEstimator):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
         """
         super().__init__(args, **kwargs)
+        if 'pool' in self.config.keys():
+            self.pool, self.nprocess = self.config["pool"]
+        else:
+            self.pool = None
+            self.nprocess=0
 
         datapath = self.config["data_path"]
         if datapath is None or datapath == "None":
@@ -639,7 +657,17 @@ class SOMPZEstimator(CatEstimator):
         subsamp = 1
 
         # Now we classify the objects into cells and save these cells
-        cells_test, dist_test = som.classify(flux[::subsamp, :], flux_err[::subsamp, :])
+        if self.pool is not None:
+            inds = np.array_split(np.arange(len(flux)), self.nprocess)
+            pickableclassify = Pickableclassify(som, flux, flux_err, inds)
+            result = self.pool.map(pickableclassify, range(self.nprocess))
+            cells_test = np.concatenate([r[0] for r in result])
+            dist_test = np.concatenate([r[1] for r in result])
+            del pickableclassify
+        else:
+            cells_test, dist_test = som.classify(flux[::subsamp, :], flux_err[::subsamp, :])
+            
+            
         # take out numpy savez
         # outfile = os.path.join(output_path, "som_{0}_{1}x{1}_assign.npz".format(somstr,som_dim))
         # np.savez(outfile, cells=cells_test, dist=dist_test)
