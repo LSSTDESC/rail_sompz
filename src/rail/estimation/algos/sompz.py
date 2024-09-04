@@ -18,6 +18,7 @@ from multiprocessing import Pool
 import pandas as pd
 import matplotlib.pyplot as plt
 import functools
+import   h5py
 
 class Pickableclassify:
     def __init__(self, som, flux, fluxerr, inds):
@@ -594,7 +595,9 @@ class SOMPZEstimator(CatEstimator):
               ('wide_data', TableHandle)]
     outputs = [('nz', QPHandle),
                ('spec_data_deep_assignment', Hdf5Handle),
+               ('spec_data_assignment', Hdf5Handle),
                ('balrog_data_deep_assignment', Hdf5Handle),
+               ('balrog_data_assignment', Hdf5Handle),
                ('wide_data_assignment', Hdf5Handle),
                ('pz_c', Hdf5Handle),
                ('pz_chat', Hdf5Handle),
@@ -831,53 +834,62 @@ class SOMPZEstimator(CatEstimator):
         self.deep_assignment = {}
         self.wide_assignment = {}
         for i, (data, label) in enumerate(zip(samples, labels)):
+            print("Working on {0}\n".format(label), flush=True)
             if i <= 1:
-                # print(self.config.inputs_deep)
-                # #######
-                #  REDO how subset of data is copied so that it works for hdf5
-                # data_deep = data[self.config.inputs_deep]
-                # data_deep_ndarray = np.array(data_deep,copy=False)
-                # Flux_deep = data_deep_ndarray.view((np.float32,
-                #                                    len(self.config.inputs_deep)))
-                ngal_deep = len(data[self.config.inputs_deep[0]])
-                num_inputs_deep = len(self.config.inputs_deep)
-                data_deep = np.zeros([ngal_deep, num_inputs_deep])
-                data_err_deep = np.zeros([ngal_deep, num_inputs_deep])
-                for j, (col, errcol) in enumerate(zip(self.config.inputs_deep, self.config.input_errs_deep)):
-                    if self.config.convert_to_flux_deep:
-                        data_deep[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_deep[j])
-                        data_err_deep[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_deep[:, j])
-                    else:
-                        data_deep[:, j] = np.array(data[col], dtype=np.float32)
-                        data_err_deep[:, j] = np.array(data[errcol], dtype=np.float32)
-
-                # ### TRY PUTTING IN THRESHOLD FROM INFORM!
-                if self.config.set_threshold_deep:
-                    truncation_value = self.config.thresh_val_deep
-                    for j in range(num_inputs_deep):
-                        mask = (data_deep[:, j] < self.config.thresh_val_deep)
-                        data_deep[:, j][mask] = truncation_value
-                        errmask = (data_err_deep[:, j] < self.config.thresh_val_deep)
-                        data_err_deep[:, j][errmask] = truncation_value
-
-                data_deep_ndarray = np.array(data_deep, copy=False)
-                flux_deep = data_deep_ndarray.view()
-
-                # data_deep = data[self.config.err_inputs_deep]
-                # data_deep_ndarray = np.array(data_deep,copy=False)
-                # flux_err_deep = data_deep_ndarray.view((np.float32,
-                #                                         len(self.config.err_inputs_deep)))
-                data_err_deep_ndarray = np.array(data_err_deep, copy=False)
-                flux_err_deep = data_err_deep_ndarray.view()
-                cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
-
-                self.deep_assignment[label] = (cells_deep, dist_deep)
-                # take out numpy savez
-                # outfile = os.path.join(output_path, label + '_deep.npz')
-                # np.savez(outfile, cells=cells_deep, dist=dist_deep)
-                tmpdict = dict(cells=cells_deep, dist=dist_deep)
                 outlabel = f"{label}_deep_assignment"
-                self.add_data(outlabel, tmpdict)
+                if os.path.isfile(self.config[outlabel]):
+                    temp = h5py.File(self.config[outlabel], 'r') 
+                    cells_deep, dist_deep = temp['cells'][:], temp['dist'][:]
+                    self.deep_assignment[label] = (cells_deep, dist_deep)
+                    tmpdict = dict(cells=cells_deep, dist=dist_deep)
+                    self.add_data(outlabel, tmpdict)
+                    temp.close()
+                else:
+                    # print(self.config.inputs_deep)
+                    # #######
+                    #  REDO how subset of data is copied so that it works for hdf5
+                    # data_deep = data[self.config.inputs_deep]
+                    # data_deep_ndarray = np.array(data_deep,copy=False)
+                    # Flux_deep = data_deep_ndarray.view((np.float32,
+                    #                                    len(self.config.inputs_deep)))
+                    ngal_deep = len(data[self.config.inputs_deep[0]])
+                    num_inputs_deep = len(self.config.inputs_deep)
+                    data_deep = np.zeros([ngal_deep, num_inputs_deep])
+                    data_err_deep = np.zeros([ngal_deep, num_inputs_deep])
+                    for j, (col, errcol) in enumerate(zip(self.config.inputs_deep, self.config.input_errs_deep)):
+                        if self.config.convert_to_flux_deep:
+                            data_deep[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_deep[j])
+                            data_err_deep[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_deep[:, j])
+                        else:
+                            data_deep[:, j] = np.array(data[col], dtype=np.float32)
+                            data_err_deep[:, j] = np.array(data[errcol], dtype=np.float32)
+
+                    # ### TRY PUTTING IN THRESHOLD FROM INFORM!
+                    if self.config.set_threshold_deep:
+                        truncation_value = self.config.thresh_val_deep
+                        for j in range(num_inputs_deep):
+                            mask = (data_deep[:, j] < self.config.thresh_val_deep)
+                            data_deep[:, j][mask] = truncation_value
+                            errmask = (data_err_deep[:, j] < self.config.thresh_val_deep)
+                            data_err_deep[:, j][errmask] = truncation_value
+
+                    data_deep_ndarray = np.array(data_deep, copy=False)
+                    flux_deep = data_deep_ndarray.view()
+
+                    # data_deep = data[self.config.err_inputs_deep]
+                    # data_deep_ndarray = np.array(data_deep,copy=False)
+                    # flux_err_deep = data_deep_ndarray.view((np.float32,
+                    #                                         len(self.config.err_inputs_deep)))
+                    data_err_deep_ndarray = np.array(data_err_deep, copy=False)
+                    flux_err_deep = data_err_deep_ndarray.view()
+                    cells_deep, dist_deep = self._assign_som(flux_deep, flux_err_deep, 'deep')
+
+                    self.deep_assignment[label] = (cells_deep, dist_deep)
+                    # take out numpy savez
+                    # outfile = os.path.join(output_path, label + '_deep.npz')
+                    # np.savez(outfile, cells=cells_deep, dist=dist_deep)
+                    tmpdict = dict(cells=cells_deep, dist=dist_deep)
+                    self.add_data(outlabel, tmpdict)
             else:
                 cells_deep, dist_deep = None, None
 
@@ -885,39 +897,47 @@ class SOMPZEstimator(CatEstimator):
             # data_wide_ndarray = np.array(data_wide,copy=False)
             # flux_wide = data_wide_ndarray.view((np.float32,
             #                                    len(self.config.inputs_wide)))
-            ngal_wide = len(data[self.config.inputs_wide[0]])
-            num_inputs_wide = len(self.config.inputs_wide)
-            data_wide = np.zeros([ngal_wide, num_inputs_wide])
-            data_err_wide = np.zeros([ngal_wide, num_inputs_wide])
-            for j, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
-                if self.config.convert_to_flux_wide:
-                    data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_wide[j])
-                    data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
-                else:
-                    data_wide[:, j] = np.array(data[col], dtype=np.float32)
-                    data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
 
-            # ## PUT IN THRESHOLD!
-            if self.config.set_threshold_wide:
-                truncation_value = self.config.thresh_value_wide
-                for j in range(num_inputs_wide):
-                    mask = (data_wide[:, j] < self.config.thresh_val_wide)
-                    data_wide[:, j][mask] = truncation_value
-                    errmask = (data_err_wide[:, j] < self.config.thresh_val_wide)
-                    data_err_wide[:, j][errmask] = truncation_value
-
-            # data_wide = data[self.config.input_errs_wide]
-            data_wide_ndarray = np.array(data_wide, copy=False)
-            flux_wide = data_wide_ndarray.view()
-            data_err_wide_ndarray = np.array(data_err_wide, copy=False)
-            flux_err_wide = data_err_wide_ndarray.view()
-
-            cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
-
-            self.wide_assignment[label] = (cells_wide, dist_wide)
-            if i > 1:
+            widelabel = f"{label}_assignment"
+            if os.path.isfile(self.config[widelabel]):
+                temp = h5py.File(self.config[widelabel], 'r') 
+                cells_wide, dist_wide = temp['cells'][:], temp['dist'][:]
+                self.wide_assignment[label] = (cells_wide, dist_wide)
                 widedict = dict(cells=cells_wide, dist=dist_wide)
-                widelabel = f"{label}_assignment"
+                self.add_data(widelabel, widedict)
+                temp.close()
+            else:
+                ngal_wide = len(data[self.config.inputs_wide[0]])
+                num_inputs_wide = len(self.config.inputs_wide)
+                data_wide = np.zeros([ngal_wide, num_inputs_wide])
+                data_err_wide = np.zeros([ngal_wide, num_inputs_wide])
+                for j, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
+                    if self.config.convert_to_flux_wide:
+                        data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_wide[j])
+                        data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
+                    else:
+                        data_wide[:, j] = np.array(data[col], dtype=np.float32)
+                        data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
+
+                # ## PUT IN THRESHOLD!
+                if self.config.set_threshold_wide:
+                    truncation_value = self.config.thresh_value_wide
+                    for j in range(num_inputs_wide):
+                        mask = (data_wide[:, j] < self.config.thresh_val_wide)
+                        data_wide[:, j][mask] = truncation_value
+                        errmask = (data_err_wide[:, j] < self.config.thresh_val_wide)
+                        data_err_wide[:, j][errmask] = truncation_value
+
+                # data_wide = data[self.config.input_errs_wide]
+                data_wide_ndarray = np.array(data_wide, copy=False)
+                flux_wide = data_wide_ndarray.view()
+                data_err_wide_ndarray = np.array(data_err_wide, copy=False)
+                flux_err_wide = data_err_wide_ndarray.view()
+
+                cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
+
+                self.wide_assignment[label] = (cells_wide, dist_wide)
+                widedict = dict(cells=cells_wide, dist=dist_wide)
                 self.add_data(widelabel, widedict)
 
             # ## save cells_deep, dist_deep, cells_wide, dist_wide to disk
@@ -957,7 +977,9 @@ class SOMPZEstimator(CatEstimator):
         output = {
 		'nz': self.get_handle("nz"),
 		'spec_data_deep_assignment': self.get_handle("spec_data_deep_assignment"),
+		'spec_data_assignment': self.get_handle("spec_data_assignment"),
 		'balrog_data_deep_assignment': self.get_handle("balrog_data_deep_assignment"),
+		'balrog_data_assignment': self.get_handle("balrog_data_assignment"),
 		'wide_data_assignment': self.get_handle("wide_data_assignment"), 
 		'pz_c': self.get_handle("pz_c"), 
 		'pz_chat': self.get_handle("pz_chat"), 
