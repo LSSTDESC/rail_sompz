@@ -19,6 +19,7 @@ import pandas as pd
 import matplotlib.pyplot as plt
 import functools
 import   h5py
+import pickle
 
 class Pickableclassify:
     def __init__(self, som, flux, fluxerr, inds):
@@ -765,6 +766,8 @@ class SOMPZEstimator(CatEstimator):
                                                   key_z=key,
                                                   key_cells_wide='cell_wide')
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
+        with open(self.config['tomo_bins_wide_dict'], 'wb') as f:
+            pickle.dump(tomo_bins_wide, f)
         
         # compute number of galaxies per tomographic bin (diagnostic info)
         # cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
