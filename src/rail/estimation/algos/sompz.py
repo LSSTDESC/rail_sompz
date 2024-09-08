@@ -525,15 +525,22 @@ class SOMPZInformer(CatInformer):
         sommetric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         learn_func = somfuncs.hFunc(ngal_deep, sigma=(30, 1))
 
-        print(f"Training deep SOM of shape {self.config.som_shape_deep}...")
+        if 'pool' in self.config.keys():
+            self.pool, self.nprocess = self.config["pool"]
+        else:
+            self.pool = None
+            assert(0)
+            self.nprocess=0
+
+        print(f"Training deep SOM of shape {self.config.som_shape_deep}...", flush=True)
         deep_som = somfuncs.NoiseSOM(sommetric, deep_input, deep_errs, learn_func,
                                      shape=self.config.som_shape_deep, minError=self.config.som_minerror_deep,
-                                     wrap=self.config.som_wrap_deep, logF=self.config.som_take_log_deep)
-        print(f"Training wide SOM of shape {self.config.som_shape_wide}...")
+                                     wrap=self.config.som_wrap_deep, logF=self.config.som_take_log_deep, pool=self.pool)
+        print(f"Training wide SOM of shape {self.config.som_shape_wide}...", flush=True)
         learn_func = somfuncs.hFunc(ngal_wide, sigma=(30, 1))
         wide_som = somfuncs.NoiseSOM(sommetric, wide_input, wide_errs, learn_func,
                                      shape=self.config.som_shape_wide, minError=self.config.som_minerror_wide,
-                                     wrap=self.config.som_wrap_wide, logF=self.config.som_take_log_wide)
+                                     wrap=self.config.som_wrap_wide, logF=self.config.som_take_log_wide, pool=self.pool)
 
         model = dict(deep_som=deep_som, wide_som=wide_som, deep_columns=self.config.inputs_deep,
                      deep_err_columns=self.config.input_errs_deep, wide_columns=self.config.inputs_wide,

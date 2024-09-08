@@ -1,9 +1,51 @@
 import numpy as np
 import pandas
 from matplotlib import pyplot as pl
+import  numba
+from tqdm import tqdm
+from itertools import starmap
 
 
 # import cmasher as cmr
+@numba.njit
+def bottleneck(w, vnS):
+            # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
+            dn = np.arcsinh(vnS)
+            # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
+            numerator = dn + w * np.log(2 * vnS)
+            return numerator, dn
+
+def parallel_dsq(vn, s, w, df, h, sPenalty):
+            # vnS is the re-scaled S/N of the cells, shape=(nS,nCells,nTargets,nFeatures)
+            # vnS: see the paragraph containing equation A7 of Sanchez+2020
+            vnS = s*vn 
+            numerator, dn = bottleneck(w, vnS)
+            
+            # dn is the asinh of the cell S/N values
+            ####
+            if np.any(np.isinf(numerator)):
+                #pdb.set_trace()
+                print("inf numerator at", np.where(np.isinf(numerator)))
+                print(np.any(np.isinf(w)),
+                      np.any(np.isinf(vnS)),
+                      np.any(np.isinf(dn)),
+                      np.any(vnS <= 0))
+            if np.any(np.isnan(numerator)):
+                #pdb.set_trace()
+                print("nan numerator at", np.where(np.isnan(numerator)))
+                print(np.any(np.isnan(w)),
+                      np.any(np.isnan(vnS)),
+                      np.any(np.isnan(dn)),
+                      np.any(vnS <= 0))
+
+            dn = numerator / (1 + w)
+            d = (dn - df) * h
+            dsq0 = np.sum(d * d, axis=3)  # Sum distance over features
+            # Now add penalty for the scaling factor
+            dsq0 +=  sPenalty
+            # Take minimum distance of all scaling factors
+            return np.min(dsq0, axis=0)
+
 
 class NoiseSOM:
     """Class to build a SOM that deals with noisy data."""
@@ -18,7 +60,8 @@ class NoiseSOM:
                  wrap=False,
                  logF=True,
                  initialize='uniform',
-                 gridOverDimensions=None):
+                 gridOverDimensions=None,
+                 pool=None):
         """
         metric: a class to define the distance metric and shifting rules.
         data, errors: arrays of shape (M,N) giving the values and errors, respectively,
@@ -154,13 +197,13 @@ class NoiseSOM:
 
         # Training loop
         minLearn = 0.001  # Don't update cells whose learning function is below this
-        for i in range(nTrain):
-            if i % 10000 == 0:
-                print('Training', i)
+        for i in tqdm(range(nTrain)):
+            #if i % 10000 == 0:
+            #    print('Training', i)
             # Calculate p , get BMU
             dd = data[order[i]]
             err = ee[order[i]]
-            bmu = self.getBMU(dd, err)
+            bmu = self.getBMU(dd, err, pool)
 
             # Get the learning function values
             fLearn = learning(xy, shape=self.shape, wrap=self.wrap, bmu=bmu, iteration=i)
@@ -175,20 +218,20 @@ class NoiseSOM:
 
         return
 
-    def chisq(self, data, errors):
+    def chisq(self, data, errors, pool):
         """
         Return (flattened) array of -2 ln(probabilities) for each cell,
         i.e. distance-squared.
         """
 
-        return self.metric(self.weights, data, errors)
+        return self.metric(self.weights, data, errors, pool)
 
-    def getBMU(self, data, errors):
+    def getBMU(self, data, errors, pool):
         """
         Assign a feature vector to a cell with maximum probability.
         Returns flattened index of BMU.
         """
-        return np.argmin(self.chisq(data, errors))
+        return np.argmin(self.chisq(data, errors, pool))
 
     def classify(self, data, errors):
         """
@@ -328,7 +371,7 @@ class AsinhMetric:
             self.sPenalty = self.s * 0.
         return
 
-    def __call__(self, cells, features, errors):
+    def __call__(self, cells, features, errors, pool=None):
         if len(cells.shape) != 2:
             raise ValueError('Metric cells is wrong dimension')
         if features.shape != errors.shape:
@@ -379,41 +422,15 @@ class AsinhMetric:
 
         # h: see Eqn A6 of Sanchez+2020. Appears as (1+nu_{ib}^2)
         h = np.hypot(1, vf)
-        for first in range(0, vn.shape[0], chunk):
-            last = min(first + chunk, vn.shape[0])
-            # vnS is the re-scaled S/N of the cells, shape=(nS,nCells,nTargets,nFeatures)
-            # vnS: see the paragraph containing equation A7 of Sanchez+2020
-            vnS = self.s[:, np.newaxis, np.newaxis, np.newaxis] * vn[first:last, :]
-            
-            # dn is the asinh of the cell S/N values
-            # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
-            dn = np.arcsinh(vnS)
-            
-            # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
-            numerator = dn + w * np.log(2 * vnS)
-            ####
-            if np.any(np.isinf(numerator)):
-                #pdb.set_trace()
-                print("inf numerator at", np.where(np.isinf(numerator)))
-                print(np.any(np.isinf(w)),
-                      np.any(np.isinf(vnS)),
-                      np.any(np.isinf(dn)),
-                      np.any(vnS <= 0))
-            if np.any(np.isnan(numerator)):
-                #pdb.set_trace()
-                print("nan numerator at", np.where(np.isnan(numerator)))
-                print(np.any(np.isnan(w)),
-                      np.any(np.isnan(vnS)),
-                      np.any(np.isnan(dn)),
-                      np.any(vnS <= 0))
-
-            dn = numerator / (1 + w)
-            d = (dn - df) * h
-            dsq0 = np.sum(d * d, axis=3)  # Sum distance over features
-            # Now add penalty for the scaling factor
-            dsq0 += self.sPenalty[:, np.newaxis, np.newaxis]
-            # Take minimum distance of all scaling factors
-            dsq[first:last, :] = np.min(dsq0, axis=0)
+        s = self.s[:, np.newaxis, np.newaxis, np.newaxis]
+        sPenalty = self.sPenalty[:, np.newaxis, np.newaxis]
+        vnlist = np.split(vn, chunk)
+        args = [(_, s, w, df, h, sPenalty) for _ in vnlist]
+        if pool is not None:
+            dsq_list = pool.starmap(parallel_dsq, args) 
+        else:
+            dsq_list = list(starmap(parallel_dsq, args))
+        dsq = np.vstack(dsq_list)
 
         return dsq
 
@@ -778,4 +795,76 @@ def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):
     ax[1, 1].set_title('stddev / local slope')
     pl.colorbar(im, ax=ax[1, 1])
 
+    return
+
+
+def somDomainColors_withname(som, indexall, nameall):
+    [index00, index01], [index10, index11], [index20, index21], index3 = indexall
+    [name00, name01], [name10, name11], [name20, name21], [name3] = nameall 
+    # Make 4-panel plot colors and mag across SOM space
+    mags = 30. - 2.5 * np.log10(som.weights)
+    ug = mags[:, index00] - mags[:, index01]
+    gi = mags[:, index10] - mags[:, index11]
+    iy = mags[:, index20] - mags[:,index21]
+    imag = mags[:,index3]
+    fig = pl.figure(figsize=(10, 9))
+
+    fig, ax = pl.subplots(nrows=2, ncols=2, figsize=(8, 8))
+    im = ax[0, 0].imshow(gi.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[0, 0].set_title(f'{name00}{name01}')
+    ax[0, 0].set_aspect('equal')
+    pl.colorbar(im, ax=ax[0, 0])
+
+    im = ax[1, 0].imshow(ug.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[1, 0].set_title(f'{name10}{name11}')
+    ax[1, 0].set_aspect('equal')
+    pl.colorbar(im, ax=ax[1, 0])
+
+    im = ax[0, 1].imshow(iy.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral_r')
+    ax[0, 1].set_title(f'{name20}{name21}')
+    ax[0, 1].set_aspect('equal')
+    pl.colorbar(im, ax=ax[0, 1])
+
+    im = ax[1, 1].imshow(imag.reshape(som.shape), interpolation='nearest', origin='lower',
+                         cmap='Spectral')
+    ax[1, 1].set_title(f'{name3}mag')
+    ax[1, 1].set_aspect('equal')
+    pl.colorbar(im, ax=ax[1, 1])
+    return
+
+def somPlot2d_withname(som, indexall, nameall):
+    
+    [index00, index01], [index10, index11], index2 = indexall
+    [name00, name01], [name10, name11], name2 = nameall
+    # Make a 2d plot of cells weights in color-color diagram space.
+    mags = 30. - 2.5 * np.log10(som.weights)
+    #ug = mags[:, 0] - mags[:, 1]
+    gi = mags[:, index00] - mags[:, index01]
+    ik = mags[:, index10] - mags[:, index11]
+    imag = mags[:, index2]
+    fig = pl.figure(figsize=(6, 7))
+    # First a color-color plot of nodes
+    pl.scatter(gi, ik, c=imag, alpha=0.3, cmap='Spectral')
+    # Draw the outline of the SOM edges
+    xx = np.arange(som.shape[0], dtype=int)
+    yy = np.arange(som.shape[1], dtype=int)
+    xxx = np.hstack((xx,
+                     np.ones(len(yy) - 2, dtype=int) * xx[-1],
+                     xx[::-1],
+                     np.zeros(len(yy) - 1, dtype=int)))
+    yyy = np.hstack((np.zeros(len(xx), dtype=int),
+                     yy[1:-1],
+                     np.ones(len(xx) - 1, dtype=int) * yy[-1],
+                     yy[-1::-1]))
+    ii = np.ravel_multi_index((xxx, yyy), som.shape)
+    pl.plot(gi[ii], ik[ii], 'k-')
+    pl.title('Node locations')
+    pl.gca().set_aspect('equal')
+    cb = pl.colorbar()
+    cb.set_label('imag')
+    pl.xlabel('gi')
+    pl.ylabel('ik')
     return
