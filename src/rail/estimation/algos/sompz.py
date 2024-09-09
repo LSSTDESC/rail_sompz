@@ -548,6 +548,7 @@ class SOMPZEstimator(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+#                          data_path=Param(str, "directory", msg="directory for output files"),
                           spec_groupname=Param(str, "photometry", msg="hdf5_groupname for spec_data"),
                           balrog_groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
                           wide_groupname=Param(str, "photometry", msg="hdf5_groupname for wide_data"),
@@ -581,11 +582,14 @@ class SOMPZEstimator(CatEstimator):
               ('wide_data', TableHandle), ]
     outputs = [('nz', QPHandle),
                ('spec_data_deep_assignment', Hdf5Handle),
+               ('spec_data_wide_assignment', Hdf5Handle),               
                ('balrog_data_deep_assignment', Hdf5Handle),
+               ('balrog_data_wide_assignment', Hdf5Handle),               
                ('wide_data_assignment', Hdf5Handle),
                ('pz_c', Hdf5Handle),
                ('pz_chat', Hdf5Handle),
                ('pc_chat', Hdf5Handle),
+               ('tomo_bin_mask_wide_data', Hdf5Handle),
                ]
 
     def __init__(self, args, **kwargs):
@@ -593,6 +597,7 @@ class SOMPZEstimator(CatEstimator):
         """
         super().__init__(args, **kwargs)
 
+        '''
         datapath = self.config["data_path"]
         if datapath is None or datapath == "None":
             tmpdatapath = os.path.join(RAILDIR, "rail/examples_data/estimation_data/data")
@@ -603,7 +608,8 @@ class SOMPZEstimator(CatEstimator):
             os.environ["SOMPZDATAPATH"] = self.data_path
         if not os.path.exists(self.data_path):  # pragma: no cover
             raise FileNotFoundError("SOMPZDATAPATH " + self.data_path + " does not exist! Check value of data_path in config file!")
-
+        '''
+        
         # check on bands, errs, and prior band
         if len(self.config.inputs_deep) != len(self.config.input_errs_deep):  # pragma: no cover
             raise ValueError("Number of inputs_deep specified in inputs_deep must be equal to number of mag errors specified in input_errs_deep!")
@@ -734,6 +740,8 @@ class SOMPZEstimator(CatEstimator):
                                                   key_z=key,
                                                   key_cells_wide='cell_wide')
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
+
+        # np.savez("tmp_tomo_dict2d.npz", tomo_bins_wide)
         
         # compute number of galaxies per tomographic bin (diagnostic info)
         # cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
@@ -758,7 +766,40 @@ class SOMPZEstimator(CatEstimator):
                             pz_chat=pz_chat)
         self.model = self.model.update(model_update)
         '''
-        return pz_c, pc_chat, nz
+        return tomo_bins_wide, pz_c, pc_chat, nz
+
+    def _find_wide_tomo_bins(self, tomo_bins_wide):
+        """the current code has a map of the wide galaxies to the wide SOM cells
+        (in wide_assign), and the mapping of which wide som cells map to which tomo
+        bin (in tomo_bins_wide, passed as an arg to this function), but not a direct
+        map of which tomo bin each wide galaxy gets mapped to.  This function will
+        return a dictionary with two entries, one that contains an array of the
+        same length as the number of input galaxies that contains an integer
+        corresponding to which tomographic bin the galaxy belongs to, and the other
+        (weight) that corresponds to the weight associated with that bin in the
+        tomo_bins_wide file (it looks to always be one, but I'll copy it just in
+        case there are situations where it is not 1.0)
+
+        Inputs: tomo_bins_wide (returned by estimate pdf)
+        Returns: wide_tomo_bins (dict)
+        """
+        wide_assign = self.widedict['cells']
+        #print(tomo_bins_wide)
+
+        #nbins = len(self.config.bin_edges)-1
+        #ngal = len(wide_assign)
+        #tomo_mask = np.zeros(ngal, dtype=int)
+        tmp_cells = np.concatenate([tomo_bins_wide[nbin][:,0].astype(np.int32) for nbin in tomo_bins_wide])
+        tmp_weights = np.concatenate([tomo_bins_wide[nbin][:,1] for nbin in tomo_bins_wide])
+        tmp_bins = np.concatenate([(np.ones(len(tomo_bins_wide[nbin][:,0])) * nbin).astype(int) for nbin in tomo_bins_wide])
+        sortidx = np.argsort(tmp_cells)
+        indices = sortidx[np.searchsorted(tmp_cells, wide_assign, sorter=sortidx)]
+        tomo_bins = tmp_bins[indices]
+        tomo_weights = tmp_weights[indices]
+
+        tmask_dict = dict(bin=tomo_bins, weight=tomo_weights)
+        return tmask_dict
+
 
     def _process_chunk(self, start, end, data, first):
         """
@@ -797,9 +838,7 @@ class SOMPZEstimator(CatEstimator):
         labels = ['spec_data', 'balrog_data', 'wide_data']
         # output_path = './' # make kwarg
         # assign samples to SOMs
-        # TODO: put repeated code into functions
         # TODO: handle case of sample already having been assigned
-        # TODO: handle file i/o better
         self.deep_assignment = {}
         self.wide_assignment = {}
         for i, (data, label) in enumerate(zip(samples, labels)):
@@ -888,9 +927,11 @@ class SOMPZEstimator(CatEstimator):
 
             self.wide_assignment[label] = (cells_wide, dist_wide)
             if i > 1:
-                widedict = dict(cells=cells_wide, dist=dist_wide)
                 widelabel = f"{label}_assignment"
-                self.add_data(widelabel, widedict)
+            else:
+                widelabel = f"{label}_wide_assignment"
+            self.widedict = dict(cells=cells_wide, dist=dist_wide)
+            self.add_data(widelabel, self.widedict)
 
             # ## save cells_deep, dist_deep, cells_wide, dist_wide to disk
             '''
@@ -905,7 +946,12 @@ class SOMPZEstimator(CatEstimator):
             df_out.to_hdf(outfile, key=label)
             #fits.writeto(outfile, data.as_array(), overwrite=True)
             '''
-        pz_c, pc_chat, nz = self._estimate_pdf()  # *samples
+        tomo_bins_wide, pz_c, pc_chat, nz = self._estimate_pdf()  # *samples
+
+        # Add in computation of which tomo bin each wide galaxy is mapped to
+        wide_tomo_bin_dict = self._find_wide_tomo_bins(tomo_bins_wide)
+        self.add_data("tomo_bin_mask_wide_data", wide_tomo_bin_dict)
+
         # self.nz = nz
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
@@ -926,13 +972,14 @@ class SOMPZEstimator(CatEstimator):
         # pdb.set_trace()
         self.finalize()
 
-        output = {
-		'nz': self.get_handle("nz"),
-		'spec_data_deep_assignment': self.get_handle("spec_data_deep_assignment"),
-		'balrog_data_deep_assignment': self.get_handle("balrog_data_deep_assignment"),
-		'wide_data_assignment': self.get_handle("wide_data_assignment"), 
-		'pz_c': self.get_handle("pz_c"), 
-		'pz_chat': self.get_handle("pz_chat"), 
-		'pc_chat': self.get_handle("pc_chat"), 
-	}
-        return output
+        #output = {
+	#	'nz': self.get_handle("nz"),
+	#	'spec_data_deep_assignment': self.get_handle("spec_data_deep_assignment"),
+	#	'balrog_data_deep_assignment': self.get_handle("balrog_data_deep_assignment"),
+	#	'wide_data_assignment': self.get_handle("wide_data_assignment"),
+	#	'pz_c': self.get_handle("pz_c"),
+	#	'pz_chat': self.get_handle("pz_chat"),
+	#	'pc_chat': self.get_handle("pc_chat"),
+	#}
+        #return output
+        return
