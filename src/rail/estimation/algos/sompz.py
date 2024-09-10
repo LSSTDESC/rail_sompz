@@ -570,6 +570,7 @@ class SOMPZEstimator(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+#                          data_path=Param(str, "directory", msg="directory for output files"),
                           spec_groupname=Param(str, "photometry", msg="hdf5_groupname for spec_data"),
                           balrog_groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
                           wide_groupname=Param(str, "photometry", msg="hdf5_groupname for wide_data"),
@@ -603,13 +604,14 @@ class SOMPZEstimator(CatEstimator):
               ('wide_data', TableHandle)]
     outputs = [('nz', QPHandle),
                ('spec_data_deep_assignment', Hdf5Handle),
-               ('spec_data_assignment', Hdf5Handle),
+               ('spec_data_wide_assignment', Hdf5Handle),               
                ('balrog_data_deep_assignment', Hdf5Handle),
-               ('balrog_data_assignment', Hdf5Handle),
+               ('balrog_data_wide_assignment', Hdf5Handle),               
                ('wide_data_assignment', Hdf5Handle),
                ('pz_c', Hdf5Handle),
                ('pz_chat', Hdf5Handle),
                ('pc_chat', Hdf5Handle),
+               ('tomo_bin_mask_wide_data', Hdf5Handle),
                ]
 
     def __init__(self, args, **kwargs):
@@ -622,6 +624,7 @@ class SOMPZEstimator(CatEstimator):
             self.pool = None
             self.nprocess=0
 
+        '''
         datapath = self.config["data_path"]
         if datapath is None or datapath == "None":
             tmpdatapath = os.path.join(RAILDIR, "rail/examples_data/estimation_data/data")
@@ -632,7 +635,8 @@ class SOMPZEstimator(CatEstimator):
             os.environ["SOMPZDATAPATH"] = self.data_path
         if not os.path.exists(self.data_path):  # pragma: no cover
             raise FileNotFoundError("SOMPZDATAPATH " + self.data_path + " does not exist! Check value of data_path in config file!")
-
+        '''
+        
         # check on bands, errs, and prior band
         if len(self.config.inputs_deep) != len(self.config.input_errs_deep):  # pragma: no cover
             raise ValueError("Number of inputs_deep specified in inputs_deep must be equal to number of mag errors specified in input_errs_deep!")
@@ -773,9 +777,6 @@ class SOMPZEstimator(CatEstimator):
                                                   key_z=key,
                                                   key_cells_wide='cell_wide')
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
-        with open(self.config['tomo_bins_wide_dict'], 'wb') as f:
-            pickle.dump(tomo_bins_wide, f)
-        
         # compute number of galaxies per tomographic bin (diagnostic info)
         # cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
         # bin_occupation_info = {'bin' + str(i) : np.sum(cell_occupation_info.loc[tomo_bins_wide_dict[i]].values) for i in range(n_bins)}
@@ -799,48 +800,129 @@ class SOMPZEstimator(CatEstimator):
                             pz_chat=pz_chat)
         self.model = self.model.update(model_update)
         '''
-        return pz_c, pc_chat, nz
+        return tomo_bins_wide, pz_c, pc_chat, nz
 
+    def _find_wide_tomo_bins(self, tomo_bins_wide):
+        """the current code has a map of the wide galaxies to the wide SOM cells
+        (in wide_assign), and the mapping of which wide som cells map to which tomo
+        bin (in tomo_bins_wide, passed as an arg to this function), but not a direct
+        map of which tomo bin each wide galaxy gets mapped to.  This function will
+        return a dictionary with two entries, one that contains an array of the
+        same length as the number of input galaxies that contains an integer
+        corresponding to which tomographic bin the galaxy belongs to, and the other
+        (weight) that corresponds to the weight associated with that bin in the
+        tomo_bins_wide file (it looks to always be one, but I'll copy it just in
+        case there are situations where it is not 1.0)
+
+        Inputs: tomo_bins_wide (returned by estimate pdf)
+        Returns: wide_tomo_bins (dict)
+        """
+        wide_assign = self.widedict['cells']
+        #print(tomo_bins_wide)
+
+        #nbins = len(self.config.bin_edges)-1
+        #ngal = len(wide_assign)
+        #tomo_mask = np.zeros(ngal, dtype=int)
+        tmp_cells = np.concatenate([tomo_bins_wide[nbin][:,0].astype(np.int32) for nbin in tomo_bins_wide])
+        tmp_weights = np.concatenate([tomo_bins_wide[nbin][:,1] for nbin in tomo_bins_wide])
+        tmp_bins = np.concatenate([(np.ones(len(tomo_bins_wide[nbin][:,0])) * nbin).astype(int) for nbin in tomo_bins_wide])
+        sortidx = np.argsort(tmp_cells)
+        indices = sortidx[np.searchsorted(tmp_cells, wide_assign, sorter=sortidx)]
+        tomo_bins = tmp_bins[indices]
+        tomo_weights = tmp_weights[indices]
+
+        tmask_dict = dict(bin=tomo_bins, weight=tomo_weights)
+        return tmask_dict
+
+    def _initialize_run(self):
+        """
+        code that gets run once
+        """
+        
+        self._output_handle = None
+
+    def _do_chunk_output(self):
+        """
+        code that gets run once
+        """
+        print('TODO')
+        assert False
+
+    def _finalize_run(self):
+        self._output_handle.finalize_write()
+        
     def _process_chunk(self, start, end, data, first):
         """
         Run SOMPZ on a chunk of data
         """
+        ngal_wide = len(data[self.config.inputs_wide[0]])
+        num_inputs_wide = len(self.config.inputs_wide)
+        data_wide = np.zeros([ngal_wide, num_inputs_wide])
+        data_err_wide = np.zeros([ngal_wide, num_inputs_wide])
+        for j, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
+            if self.config.convert_to_flux_wide:
+                data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_wide[j])
+                data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
+            else:
+                data_wide[:, j] = np.array(data[col], dtype=np.float32)
+                data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
 
+        if self.config.set_threshold_wide:
+            truncation_value = self.config.thresh_value_wide
+            for j in range(num_inputs_wide):
+                mask = (data_wide[:, j] < self.config.thresh_val_wide)
+                data_wide[:, j][mask] = truncation_value
+                errmask = (data_err_wide[:, j] < self.config.thresh_val_wide)
+                data_err_wide[:, j][errmask] = truncation_value
+
+        data_wide_ndarray = np.array(data_wide, copy=False)
+        flux_wide = data_wide_ndarray.view()
+        data_err_wide_ndarray = np.array(data_err_wide, copy=False)
+        flux_err_wide = data_err_wide_ndarray.view()
+
+        cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
+        print('TODO store this info')
+        output_handle = None
+        self._do_chunk_output(output_handle, start, end, first)
+        
     def run(self,):
-        # note: hdf5_groupname is a SHARED_PARAM defined in the parent class!
         if self.config.spec_groupname:
             spec_data = self.get_data('spec_data')[self.config.spec_groupname]
         else:  # pragma: no cover
-            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             spec_data = self.get_data('spec_data')
 
         if self.config.balrog_groupname:
             balrog_data = self.get_data('balrog_data')[self.config.balrog_groupname]
         else:  # pragma: no cover
-            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             balrog_data = self.get_data('balrog_data')
 
         if self.config.wide_groupname:
             wide_data = self.get_data('wide_data')[self.config.wide_groupname]
         else:  # pragma: no cover
-            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             wide_data = self.get_data('wide_data')            
-        # spec_data = self.get_data('spec_data')
 
-        if self.config.debug:
-            spec_data = spec_data[:2000]
-            balrog_data = balrog_data[:2000]
-            wide_data = wide_data[:2000]
-            
+        iterator = self.input_iterator("wide_data")
+        first = True
+        self._initialize_run() # TODO implement
+        self._output_handle = None # TODO consider handle for dict to store all outputs
+        for s, e, data_chunk in iterator:
+            if self.rank == 0:
+                print(f"Process {self.rank} running estimator on chunk {s} - {e}")
+            self._process_chunk(s, e, data_chunk, first)
+            first = False
+            gc.collect()
+
+        print('You need to do spec_data and balrog_data')
+        self._finalize_run()
+        assert False,'below this line is code that needs to be updated'
+        
         samples = [spec_data, balrog_data, wide_data]
         # NOTE: DO NOT CHANGE NAMES OF 'labels' below! They are used
         # in the naming of the outputs of the stage!
         labels = ['spec_data', 'balrog_data', 'wide_data']
         # output_path = './' # make kwarg
         # assign samples to SOMs
-        # TODO: put repeated code into functions
         # TODO: handle case of sample already having been assigned
-        # TODO: handle file i/o better
         self.deep_assignment = {}
         self.wide_assignment = {}
         for i, (data, label) in enumerate(zip(samples, labels)):
@@ -908,47 +990,13 @@ class SOMPZEstimator(CatEstimator):
             # flux_wide = data_wide_ndarray.view((np.float32,
             #                                    len(self.config.inputs_wide)))
 
-            widelabel = f"{label}_assignment"
-            if os.path.isfile(self.config[widelabel]):
-                temp = h5py.File(self.config[widelabel], 'r') 
-                cells_wide, dist_wide = temp['cells'][:], temp['dist'][:]
-                self.wide_assignment[label] = (cells_wide, dist_wide)
-                widedict = dict(cells=cells_wide, dist=dist_wide)
-                self.add_data(widelabel, widedict)
-                temp.close()
+            self.wide_assignment[label] = (cells_wide, dist_wide)
+            if i > 1:
+                widelabel = f"{label}_assignment"
             else:
-                ngal_wide = len(data[self.config.inputs_wide[0]])
-                num_inputs_wide = len(self.config.inputs_wide)
-                data_wide = np.zeros([ngal_wide, num_inputs_wide])
-                data_err_wide = np.zeros([ngal_wide, num_inputs_wide])
-                for j, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
-                    if self.config.convert_to_flux_wide:
-                        data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_wide[j])
-                        data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
-                    else:
-                        data_wide[:, j] = np.array(data[col], dtype=np.float32)
-                        data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
-
-                # ## PUT IN THRESHOLD!
-                if self.config.set_threshold_wide:
-                    truncation_value = self.config.thresh_value_wide
-                    for j in range(num_inputs_wide):
-                        mask = (data_wide[:, j] < self.config.thresh_val_wide)
-                        data_wide[:, j][mask] = truncation_value
-                        errmask = (data_err_wide[:, j] < self.config.thresh_val_wide)
-                        data_err_wide[:, j][errmask] = truncation_value
-
-                # data_wide = data[self.config.input_errs_wide]
-                data_wide_ndarray = np.array(data_wide, copy=False)
-                flux_wide = data_wide_ndarray.view()
-                data_err_wide_ndarray = np.array(data_err_wide, copy=False)
-                flux_err_wide = data_err_wide_ndarray.view()
-
-                cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
-
-                self.wide_assignment[label] = (cells_wide, dist_wide)
-                widedict = dict(cells=cells_wide, dist=dist_wide)
-                self.add_data(widelabel, widedict)
+                widelabel = f"{label}_wide_assignment"
+            self.widedict = dict(cells=cells_wide, dist=dist_wide)
+            self.add_data(widelabel, self.widedict)
 
             # ## save cells_deep, dist_deep, cells_wide, dist_wide to disk
             '''
@@ -963,7 +1011,12 @@ class SOMPZEstimator(CatEstimator):
             df_out.to_hdf(outfile, key=label)
             #fits.writeto(outfile, data.as_array(), overwrite=True)
             '''
-        pz_c, pc_chat, nz = self._estimate_pdf()  # *samples
+        tomo_bins_wide, pz_c, pc_chat, nz = self._estimate_pdf()  # *samples
+
+        # Add in computation of which tomo bin each wide galaxy is mapped to
+        wide_tomo_bin_dict = self._find_wide_tomo_bins(tomo_bins_wide)
+        self.add_data("tomo_bin_mask_wide_data", wide_tomo_bin_dict)
+
         # self.nz = nz
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
@@ -979,20 +1032,6 @@ class SOMPZEstimator(CatEstimator):
         self.set_data("spec_data", spec_data)
         self.set_data("balrog_data", balrog_data)
         self.set_data("wide_data", wide_data)
-
         self.run()
-        # pdb.set_trace()
         self.finalize()
-
-        output = {
-		'nz': self.get_handle("nz"),
-		'spec_data_deep_assignment': self.get_handle("spec_data_deep_assignment"),
-		'spec_data_assignment': self.get_handle("spec_data_assignment"),
-		'balrog_data_deep_assignment': self.get_handle("balrog_data_deep_assignment"),
-		'balrog_data_assignment': self.get_handle("balrog_data_assignment"),
-		'wide_data_assignment': self.get_handle("wide_data_assignment"), 
-		'pz_c': self.get_handle("pz_c"), 
-		'pz_chat': self.get_handle("pz_chat"), 
-		'pc_chat': self.get_handle("pc_chat"), 
-	}
-        return output
+        return

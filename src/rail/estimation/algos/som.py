@@ -1,3 +1,5 @@
+import time
+import datetime
 import numpy as np
 import pandas
 from matplotlib import pyplot as pl
@@ -196,6 +198,7 @@ class NoiseSOM:
         np.random.shuffle(order)
 
         # Training loop
+        #t0 = time.time()
         minLearn = 0.001  # Don't update cells whose learning function is below this
         for i in tqdm(range(nTrain)):
             #if i % 10000 == 0:
@@ -244,8 +247,10 @@ class NoiseSOM:
         bmu = np.zeros(nPts, dtype=int)
         dsq = np.zeros(nPts, dtype=float)
         for first in range(0, nPts, blocksize):
-            if first % 1000 == 0:
-                print("classifying", first)
+            t0 = time.time()
+            if first % 10000 == 0:
+                deltat = time.time() - t0
+                print(f"classifying {first} {deltat:.2f}")
             last = min(first + blocksize, nPts)
             d = self.metric(self.weights, data[first:last], errors[first:last])
             bb = np.argmin(d, axis=0)
