@@ -409,6 +409,9 @@ class AsinhMetric:
         # Break the cells into bunches to avoid super-large 4d arrays
 
         chunk = 512
+        if pool is not None:
+            chunk = pool[1]
+            chunk = int(chunk)
         # dsq is the destination array for the results (distance-squared)
         dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
         # df is the asinh of the galaxy S/N values
@@ -429,10 +432,10 @@ class AsinhMetric:
         h = np.hypot(1, vf)
         s = self.s[:, np.newaxis, np.newaxis, np.newaxis]
         sPenalty = self.sPenalty[:, np.newaxis, np.newaxis]
-        vnlist = np.split(vn, chunk)
+        vnlist =  np.array_split(vn, chunk)
         args = [(_, s, w, df, h, sPenalty) for _ in vnlist]
         if pool is not None:
-            dsq_list = pool.starmap(parallel_dsq, args) 
+            dsq_list = pool[0].starmap(parallel_dsq, args) 
         else:
             dsq_list = list(starmap(parallel_dsq, args))
         dsq = np.vstack(dsq_list)
@@ -841,7 +844,6 @@ def somDomainColors_withname(som, indexall, nameall):
     return
 
 def somPlot2d_withname(som, indexall, nameall):
-    
     [index00, index01], [index10, index11], index2 = indexall
     [name00, name01], [name10, name11], name2 = nameall
     # Make a 2d plot of cells weights in color-color diagram space.

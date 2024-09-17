@@ -20,6 +20,7 @@ import matplotlib.pyplot as plt
 import functools
 import   h5py
 import pickle
+from abc import ABC
 
 class Pickableclassify:
     def __init__(self, som, flux, fluxerr, inds):
@@ -417,146 +418,98 @@ def plot_nz(hists, zbins, outfile, xlimits=(0, 2), ylimits=(0, 3.25)):
     plt.close()
 
 
-class SOMPZInformer(CatInformer):
+
+class SOMPZInformer(SOMPZInformer):
     """Inform stage for SOMPZEstimator
     """
     name = "SOMPZInformer"
     config_options = CatInformer.config_options.copy()
     config_options.update(redshift_col=SHARED_PARAMS,
-                          deep_groupname=Param(str, "photometry", msg="hdf5_groupname for deep data"),
-                          wide_groupname=Param(str, "photometry", msg="hdf5_groupname for wide data"),
-                          inputs_deep=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
-                          input_errs_deep=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for deep data"),
-                          inputs_wide=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for wide data"),
-                          input_errs_wide=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for wide data"),
-                          zero_points_deep=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for deep data, if needed"),
-                          zero_points_wide=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for wide data, if needed"),
-                          som_shape_deep=Param(tuple, (32, 32), msg="shape for the deep som, must be a 2-element tuple"),
-                          som_shape_wide=Param(tuple, (32, 32), msg="shape for the wide som, must be a 2-element tuple"),
-                          som_minerror_deep=Param(float, 0.01, msg="floor placed on observational error on each feature in deep som"),
-                          som_minerror_wide=Param(float, 0.01, msg="floor placed on observational error on each feature in wide som"),
-                          som_wrap_deep=Param(bool, False, msg="flag to set whether the deep SOM has periodic boundary conditions"),
-                          som_wrap_wide=Param(bool, False, msg="flag to set whether the wide SOM has periodic boundary conditions"),
-                          som_take_log_deep=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for deep som"),
-                          som_take_log_wide=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for wide som"),
-                          convert_to_flux_deep=Param(bool, False, msg="flag for whether to convert input columns to fluxes for deep data"
+                          groupname=Param(str, "photometry", msg="hdf5_groupname for ata"),
+                          inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for data"),
+                          input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for data"),
+                          zero_points=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for data, if needed"),
+                          som_shape=Param(tuple, (32, 32), msg="shape for the som, must be a 2-element tuple"),
+                          som_minerror=Param(float, 0.01, msg="floor placed on observational error on each feature in som"),
+                          som_wrap=Param(bool, False, msg="flag to set whether the SOM has periodic boundary conditions"),
+                          som_take_log=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for som"),
+                          convert_to_flux=Param(bool, False, msg="flag for whether to convert input columns to fluxes for data"
                                                      "set to true if inputs are mags and to False if inputs are already fluxes"),
-                          convert_to_flux_wide=Param(bool, False, msg="flag for whether to convert input columns to fluxes for wide data"),
-                          set_threshold_deep=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
-                          thresh_val_deep=Param(float, 1.e-5, msg="threshold value for set_threshold for deep data"),
-                          set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
-                          thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"))
+                          set_threshold=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
+                          thresh_val=Param(float, 1.e-5, msg="threshold value for set_threshold for data"),
+                          thresh_val_err=Param(float, 1.e-5, msg="threshold value for set_threshold for data error"),
 
-    # inputs = [('input_spec_data', TableHandle),
-    #          ('input_deep_data', TableHandle),
-    #          ('input_wide_data', TableHandle),
-    #          ]
-
-    inputs = [('input_deep_data', TableHandle),
-              ('input_wide_data', TableHandle),
+    inputs = [('input_data', TableHandle),
               ]
+    outputs = [('model', ModelHandle), 
+            ]
+    @abstractmethod
+    def run(self):
+        pass
 
-    # outputs = [('model_som_deep', ModelHandle),
-    #            ('model_som_wide', ModelHandle)]
-    # ## outputs = [('model', ModelHandle)]
+    @abstractmethod
+    def inform(self, input_deep_data, input_wide_data):
+        pass
 
     def run(self):
 
         # note: hdf5_groupname is a SHARED_PARAM defined in the parent class!
-        if self.config.deep_groupname:
-            deep_data = self.get_data('input_deep_data')[self.config.deep_groupname]
+        if self.config.groupname:
+            data = self.get_data('input_data')[self.config.groupname]
         else:  # pragma: no cover
             # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
-            deep_data = self.get_data('input_deep_data')
-        if self.config.wide_groupname:
-            wide_data = self.get_data('input_wide_data')[self.config.wide_groupname]
-        else:  # pragma: no cover
-            # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
-            wide_data = self.get_data('input_wide_data')            
-        # spec_data = self.get_data('input_spec_data')
+        num_inputs = len(self.config.inputs)
+        nga = len(data[self.config.inputs[0]])
+        print(f"{ngal} galaxies in sample")
 
-        num_inputs_deep = len(self.config.inputs_deep)
-        num_inputs_wide = len(self.config.inputs_wide)
-        ngal_deep = len(deep_data[self.config.inputs_deep[0]])
-        ngal_wide = len(wide_data[self.config.inputs_wide[0]])
-        print(f"{ngal_deep} galaxies in deep sample")
-        print(f"{ngal_wide} galaxies in wide sample")
+        d_input = np.zeros([ngal, num_inputs])
+        d_errs = np.zeros([ngal, num_inputs])
 
-        deep_input = np.zeros([ngal_deep, num_inputs_deep])
-        deep_errs = np.zeros([ngal_deep, num_inputs_deep])
-        wide_input = np.zeros([ngal_wide, num_inputs_wide])
-        wide_errs = np.zeros([ngal_wide, num_inputs_wide])
-
-        # assemble deep data
-        for i, (col, errcol) in enumerate(zip(self.config.inputs_deep, self.config.input_errs_deep)):
-            if self.config.convert_to_flux_deep:
-                deep_input[:, i] = mag2flux(deep_data[col], self.config.zero_points_deep[i])
-                deep_errs[:, i] = magerr2fluxerr(deep_data[errcol], deep_input[:, i])
+        # assemble data
+        for i, (col, errcol) in enumerate(zip(self.config.inputs, self.config.input_errs)):
+            if self.config.convert_to_flux:
+                d_input[:, i] = mag2flux(data[col], self.config.zero_points[i])
+                d_errs[:, i] = magerr2fluxerr(data[errcol], d_input[:, i])
             else:
-                deep_input[:, i] = deep_data[col]
-                deep_errs[:, i] = deep_data[errcol]
-
-        # assemble wide data
-        for i, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
-            if self.config.convert_to_flux_wide:
-                wide_input[:, i] = mag2flux(wide_data[col], self.config.zero_points_deep[i])
-                wide_errs[:, i] = magerr2fluxerr(wide_data[errcol], wide_input[:, i])
-            else:
-                wide_input[:, i] = wide_data[col]
-                wide_errs[:, i] = wide_data[errcol]
+                d_input[:, i] = d_data[col]
+                d_errs[:, i] = d_data[errcol]
 
         # put a temporary threshold bit in. TODO fix this up later...
-        if self.config.set_threshold_deep:
-            truncation_value = 1e-2
-            for i in range(num_inputs_deep):
-                mask = (deep_input[:, i] < self.config.thresh_val_deep)
-                deep_input[:, i][mask] = truncation_value
-                errmask = (deep_errs[:, i] < self.config.thresh_val_deep)
-                deep_errs[:, i][errmask] = truncation_value
+        if self.config.set_threshold:
+            for i in range(num_inputs):
+                mask = (d_input[:, i] < self.config.thresh_val)
+                d_input[:, i][mask] = self.config.thresh_val
+                errmask = (d_errs[:, i] < self.config.thresh_val_err)
+                d_errs[:, i][errmask] = self.config.thresh_val_err
 
-        if self.config.set_threshold_wide:
-            truncation_value = 1e-2
-            for i in range(num_inputs_wide):
-                mask = (wide_input[:, i] < self.config.thresh_val_wide)
-                wide_input[:, i][mask] = truncation_value
-                errmask = (wide_errs[:, i] < self.config.thresh_val_wide)
-                wide_errs[:, i][errmask] = truncation_value
 
         sommetric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
-        learn_func = somfuncs.hFunc(ngal_deep, sigma=(30, 1))
+        learn_func = somfuncs.hFunc(ngal, sigma=(30, 1))
 
         if 'pool' in self.config.keys():
             self.pool, self.nprocess = self.config["pool"]
         else:
             self.pool = None
-            assert(0)
             self.nprocess=0
 
-        print(f"Training deep SOM of shape {self.config.som_shape_deep}...", flush=True)
-        deep_som = somfuncs.NoiseSOM(sommetric, deep_input, deep_errs, learn_func,
-                                     shape=self.config.som_shape_deep, minError=self.config.som_minerror_deep,
-                                     wrap=self.config.som_wrap_deep, logF=self.config.som_take_log_deep, pool=self.pool)
-        print(f"Training wide SOM of shape {self.config.som_shape_wide}...", flush=True)
-        learn_func = somfuncs.hFunc(ngal_wide, sigma=(30, 1))
-        wide_som = somfuncs.NoiseSOM(sommetric, wide_input, wide_errs, learn_func,
-                                     shape=self.config.som_shape_wide, minError=self.config.som_minerror_wide,
-                                     wrap=self.config.som_wrap_wide, logF=self.config.som_take_log_wide, pool=self.pool)
+        print(f"Training SOM of shape {self.config.som_shape}...", flush=True)
+        if os.path.isfile(self.config['model']):
+            with open(self.config['model'], 'rb') as f:
+                model = pickle.load(f)
+            self.add_data('model', model)
 
-        model = dict(deep_som=deep_som, wide_som=wide_som, deep_columns=self.config.inputs_deep,
-                     deep_err_columns=self.config.input_errs_deep, wide_columns=self.config.inputs_wide,
-                     wide_err_columns=self.config.input_errs_wide)
-        self.model = model
+        else:
+            som = somfuncs.NoiseSOM(sommetric, d_input, d_errs, learn_func,
+                                     shape=self.config.som_shape, minError=self.config.som_minerror,
+                                     wrap=self.config.som_wrap, logF=self.config.som_take_log, pool=self.config["pool"])
+            model = dict(som=som, columns=self.config.inputs,
+                     err_columns=self.config.input_errs)
+            self.add_data('model', model)
 
-        self.add_data('model', self.model)
-
-    def inform(self, input_deep_data, input_wide_data):
-        # self.add_data('input_spec_data', input_spec_data)
-        self.set_data('input_deep_data', input_deep_data)
-        self.set_data('input_wide_data', input_wide_data)
-
+    def inform(self, input_data):
+        self.set_data('input_data', input_data)
         self.run()
         self.finalize()
-
         return self.model
 
 
@@ -598,7 +551,8 @@ class SOMPZEstimator(CatEstimator):
                           thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"),
                           debug=Param(bool, False, msg="boolean reducing dataset size for quick debuggin"))
 
-    inputs = [('model', ModelHandle),
+    inputs = [('model_deep', ModelHandle),
+             ('model_wide', ModelHandle),
               ('spec_data', TableHandle),
               ('balrog_data', TableHandle),
               ('wide_data', TableHandle)]
@@ -648,8 +602,49 @@ class SOMPZEstimator(CatEstimator):
 #        if self.config.ref_band_wide not in self.config.inputs_wide:  # pragma: no cover
 #            raise ValueError(f"reference band not found in inputs_wide specified in inputs_wide: {str(self.config.inputs_wide)}")
 
-        self.model = self.open_model(**self.config)  # None
-        print('initialized model', self.model)
+
+
+    def open_model(self, **kwargs):
+        """Load the model and/or attach it to this Creator.
+
+        Keywords
+        --------
+        model : object, str or ModelHandle
+            Either an object with a trained model, a path pointing to a file
+            that can be read to obtain the trained model, or a ``ModelHandle``
+            providing access to the trained model
+
+        Returns
+        -------
+        self.model : object
+            The object encapsulating the trained model
+        """
+        deep_model = kwargs.get("deep_model", None)
+        wide_model = kwargs.get("wide_model", None)
+        if deep_model is None or deep_model == "None":  # pragma: no cover
+            self.deep_model = None
+	else:
+	    if isinstance(deep_model, str):  # pragma: no cover
+		self.deep_model = self.set_data("deep_model", data=None, path=deep_model)
+		self.config["deep_model"] = deep_model
+	    else:
+		if isinstance(deep_model, ModelHandle):  # pragma: no cover
+		    if deep_model.has_path:
+			self.config["deep_model"] = deep_model.path
+		self.deep_model = self.set_data("deep_model", deep_model)
+
+        if wide_model is None or wide_model == "None":  # pragma: no cover
+            self.wide_model = None
+	else:
+	    if isinstance(wide_model, str):  # pragma: no cover
+		self.wide_model = self.set_data("wide_model", data=None, path=wide_model)
+		self.config["wide_model"] = wide_model
+	    else:
+		if isinstance(wide_model, ModelHandle):  # pragma: no cover
+		    if wide_model.has_path:
+			self.config["wide_model"] = wide_model.path
+		self.wide_model = self.set_data("wide_model", wide_model)
+	return self.deep_model, self.wide_model
 
     def _assign_som(self, flux, flux_err, somstr):
         if somstr == 'deep':
@@ -660,7 +655,12 @@ class SOMPZEstimator(CatEstimator):
         # output_path = './'  # TODO make kwarg
         nTrain = flux.shape[0]
         # som_weights = np.load(infile_som, allow_pickle=True)
-        som_weights = self.model[somstr + '_som'].weights
+	if somstr=="deep":
+	        som_weights = self.deep_model['som'].weights
+	elif somstr=="wide":
+	        som_weights = self.wide_model['som'].weights
+	else:
+	     assert(0)
         hh = somfuncs.hFunc(nTrain, sigma=(30, 1))
         metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         som = somfuncs.NoiseSOM(metric, None, None,
@@ -696,8 +696,8 @@ class SOMPZEstimator(CatEstimator):
         self.bincents = 0.5 * (zbins[1:] + zbins[:-1])
         # TODO: improve file i/o
         # output_path = './'
-        deep_som_size = np.product(self.model['deep_som'].shape)
-        wide_som_size = np.product(self.model['wide_som'].shape)
+        deep_som_size = np.product(self.deep_model['som'].shape)
+        wide_som_size = np.product(self.wide_model['som'].shape)
 
         all_deep_cells = np.arange(deep_som_size)
         # key = 'specz_redshift'
@@ -795,11 +795,6 @@ class SOMPZEstimator(CatEstimator):
                                          force_assignment=False,
                                          cell_key='cell_wide')
 
-        '''
-        model_update = dict(pz_c=pz_c, pc_chat=pc_chat, pchat=p_chat,
-                            pz_chat=pz_chat)
-        self.model = self.model.update(model_update)
-        '''
         return tomo_bins_wide, pz_c, pc_chat, nz
 
     def _find_wide_tomo_bins(self, tomo_bins_wide):
@@ -886,6 +881,8 @@ class SOMPZEstimator(CatEstimator):
         self._do_chunk_output(output_handle, start, end, first)
         
     def run(self,):
+        self.deep_model, self.wide_model = self.open_model(**self.config)  # None
+        print('initialized model', self.deep_model, self.wide_model)
         if self.config.spec_groupname:
             spec_data = self.get_data('spec_data')[self.config.spec_groupname]
         else:  # pragma: no cover
@@ -901,20 +898,20 @@ class SOMPZEstimator(CatEstimator):
         else:  # pragma: no cover
             wide_data = self.get_data('wide_data')            
 
-        iterator = self.input_iterator("wide_data")
-        first = True
-        self._initialize_run() # TODO implement
-        self._output_handle = None # TODO consider handle for dict to store all outputs
-        for s, e, data_chunk in iterator:
-            if self.rank == 0:
-                print(f"Process {self.rank} running estimator on chunk {s} - {e}")
-            self._process_chunk(s, e, data_chunk, first)
-            first = False
-            gc.collect()
+        #iterator = self.input_iterator("wide_data")
+        #first = True
+        #self._initialize_run() # TODO implement
+        #self._output_handle = None # TODO consider handle for dict to store all outputs
+        #for s, e, data_chunk in iterator:
+        #    if self.rank == 0:
+        #        print(f"Process {self.rank} running estimator on chunk {s} - {e}")
+        #    self._process_chunk(s, e, data_chunk, first)
+        #    first = False
+        #    gc.collect()
 
-        print('You need to do spec_data and balrog_data')
-        self._finalize_run()
-        assert False,'below this line is code that needs to be updated'
+        #print('You need to do spec_data and balrog_data')
+        #self._finalize_run()
+        #assert False,'below this line is code that needs to be updated'
         
         samples = [spec_data, balrog_data, wide_data]
         # NOTE: DO NOT CHANGE NAMES OF 'labels' below! They are used
@@ -985,32 +982,43 @@ class SOMPZEstimator(CatEstimator):
             else:
                 cells_deep, dist_deep = None, None
 
-            # data_wide = data[self.config.inputs_wide]
-            # data_wide_ndarray = np.array(data_wide,copy=False)
-            # flux_wide = data_wide_ndarray.view((np.float32,
-            #                                    len(self.config.inputs_wide)))
+            ngal_wide = len(data[self.config.inputs_wide[0]])
+            num_inputs_wide = len(self.config.inputs_wide)
+            data_wide = np.zeros([ngal_wide, num_inputs_wide])
+            data_err_wide = np.zeros([ngal_wide, num_inputs_wide])
+            for j, (col, errcol) in enumerate(zip(self.config.inputs_wide, self.config.input_errs_wide)):
+                if self.config.convert_to_flux_wide:
+                    data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points_wide[j])
+                    data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
+                else:
+                    data_wide[:, j] = np.array(data[col], dtype=np.float32)
+                    data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
 
-            self.wide_assignment[label] = (cells_wide, dist_wide)
+            # ## PUT IN THRESHOLD!
+            if self.config.set_threshold_wide:
+                truncation_value = self.config.thresh_value_wide
+                for j in range(num_inputs_wide):
+                    mask = (data_wide[:, j] < self.config.thresh_val_wide)
+                    data_wide[:, j][mask] = truncation_value
+                    errmask = (data_err_wide[:, j] < self.config.thresh_val_wide)
+                    data_err_wide[:, j][errmask] = truncation_value
+
+            # data_wide = data[self.config.input_errs_wide]
+            data_wide_ndarray = np.array(data_wide, copy=False)
+            flux_wide = data_wide_ndarray.view()
+            data_err_wide_ndarray = np.array(data_err_wide, copy=False)
+            flux_err_wide = data_err_wide_ndarray.view()
+
+            cells_wide, dist_wide = self._assign_som(flux_wide, flux_err_wide, 'wide')
             if i > 1:
                 widelabel = f"{label}_assignment"
             else:
                 widelabel = f"{label}_wide_assignment"
+
+            self.wide_assignment[label] = (cells_wide, dist_wide)
             self.widedict = dict(cells=cells_wide, dist=dist_wide)
             self.add_data(widelabel, self.widedict)
 
-            # ## save cells_deep, dist_deep, cells_wide, dist_wide to disk
-            '''
-            outfile = os.path.join(output_path, label +  '_wide.npz')
-            np.savez(outfile, cells=cells_wide, dist=dist_wide)
-
-            outfile = os.path.join(output_path, label + '_incl_cells.h5')
-            print('write ' + outfile)
-
-            names = [name for name in data.colnames if len(data[name].shape) <= 1]
-            df_out = data[names].to_pandas()
-            df_out.to_hdf(outfile, key=label)
-            #fits.writeto(outfile, data.as_array(), overwrite=True)
-            '''
         tomo_bins_wide, pz_c, pc_chat, nz = self._estimate_pdf()  # *samples
 
         # Add in computation of which tomo bin each wide galaxy is mapped to
