@@ -108,7 +108,7 @@ class NoiseSOM:
                     # Array is already flattened, just copy it
                     self.weights = np.array(initialize)
                 else:
-                    raise ValueError('Wrong shape for initialize ndarray', initialize.shape)
+                    raise ValueError('Wrong shape for initialize ndarray', initialize.shape, self.shape)
                 if self.logF and np.min(self.weights.flatten()) <= 0:
                     # Cannot deal with negative weights in a log SOM:
                     raise ValueError('Non-positive feature in initialization of ' +
@@ -246,11 +246,11 @@ class NoiseSOM:
         nPts = data.shape[0]
         bmu = np.zeros(nPts, dtype=int)
         dsq = np.zeros(nPts, dtype=float)
+        t0 = time.time()
         for first in range(0, nPts, blocksize):
-            t0 = time.time()
-            if first % 10000 == 0:
+            if first % 5000 == 0:
                 deltat = time.time() - t0
-                print(f"classifying {first} {deltat:.2f}")
+                print(f"classifying {first} {deltat:.2f}", flush=True)
             last = min(first + blocksize, nPts)
             d = self.metric(self.weights, data[first:last], errors[first:last])
             bb = np.argmin(d, axis=0)
@@ -806,11 +806,11 @@ def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):
     return
 
 
-def somDomainColors_withname(som, indexall, nameall):
+def somDomainColors_withname(som, indexall, nameall, zp=22.5):
     [index00, index01], [index10, index11], [index20, index21], index3 = indexall
     [name00, name01], [name10, name11], [name20, name21], [name3] = nameall 
     # Make 4-panel plot colors and mag across SOM space
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, index00] - mags[:, index01]
     gi = mags[:, index10] - mags[:, index11]
     iy = mags[:, index20] - mags[:,index21]
@@ -843,11 +843,11 @@ def somDomainColors_withname(som, indexall, nameall):
     pl.colorbar(im, ax=ax[1, 1])
     return
 
-def somPlot2d_withname(som, indexall, nameall):
+def somPlot2d_withname(som, indexall, nameall, zp=22.5):
     [index00, index01], [index10, index11], index2 = indexall
     [name00, name01], [name10, name11], name2 = nameall
     # Make a 2d plot of cells weights in color-color diagram space.
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     #ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, index00] - mags[:, index01]
     ik = mags[:, index10] - mags[:, index11]
