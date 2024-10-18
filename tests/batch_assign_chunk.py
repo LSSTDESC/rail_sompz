@@ -16,7 +16,7 @@ import rail
 import yaml
 import argparse
 # change to your rail location
-from rail.estimation.algos.sompz_new import SOMPZEstimator,SOMPZEstimatorBase, SOMPZEstimatorWide, SOMPZEstimatorDeep,SOMPZTomobin,SOMPZPzc, SOMPZPzchat, SOMPZnz, SOMPZPc_chat,Hdf5Handle
+from rail.estimation.algos.sompz import SOMPZEstimator,SOMPZEstimatorBase, SOMPZEstimatorWide, SOMPZEstimatorDeep,SOMPZTomobin,SOMPZPzc, SOMPZPzchat, SOMPZnz, SOMPZPc_chat,Hdf5Handle
 import pandas as pd 
 import gc
 import h5py
