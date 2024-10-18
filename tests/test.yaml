@@ -1,0 +1,21 @@
+balrog_data: ./deep_0.hdf5
+spec_data: ./deep_0.hdf5_spec
+wide_data: ./Rd.hdf5
+
+NspecsubsampleN : 5.e2 
+NbalrogsubsampleN : 5.e3
+NwidesubsampleN : 5.0e3
+deep_bands: ['U','G','R','I','Z','Y','Y2','J','H','F'] 
+wide_bands: ['U','G','R','I','Z','Y','Y2','J','H','F'] 
+refdeep: 'H' 
+redwide: 'H'
+wide_som_size: 32
+deep_som_size: 64
+outpath: ./out/
+deepmodel: "CARDINAL_model_test_deep_{0}.pkl"
+widemodel: "CARDINAL_model_test_wide_{0}.pkl"
+specz_name: 'z'
+specz_cond: "REDSHIFT FIELD"
+Hcut: 24.96
+nprocess: 10
+SNRcut: 18
