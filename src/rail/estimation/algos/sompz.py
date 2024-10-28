@@ -426,7 +426,8 @@ class SOMPZInformer(CatInformer):
     name = "SOMPZInformer"
     config_options = CatInformer.config_options.copy()
     config_options.update(redshift_col=SHARED_PARAMS,
-                          groupname=Param(str, "photometry", msg="hdf5_groupname for ata"),
+                          hdf5_groupname=SHARED_PARAMS,
+                          #groupname=Param(str, "photometry", msg="hdf5_groupname for ata"),
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for data"),
                           zero_points=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for data, if needed"),
@@ -449,8 +450,8 @@ class SOMPZInformer(CatInformer):
     def run(self):
 
         # note: hdf5_groupname is a SHARED_PARAM defined in the parent class!
-        if self.config.groupname:
-            data = self.get_data('input_data')[self.config.groupname]
+        if self.config.hdf5_groupname:
+            data = self.get_data('input_data')[self.config.hdf5_groupname]
         else:  # pragma: no cover
             # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             data = self.get_data('input_data')
@@ -1310,9 +1311,10 @@ class SOMPZEstimatorBase(CatEstimator):
     name = "SOMPZEstimatorBase"
     config_options = CatEstimator.config_options.copy()
     config_options.update(
-                        chunk_size=Param(int, 512, msg="chunck size"),
-                        redshift_col=SHARED_PARAMS,
-                          groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
+                          chunk_size=SHARED_PARAMS,
+                          redshift_col=SHARED_PARAMS,
+                          hdf5_groupname=SHARED_PARAMS,
+                          #groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
                           specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for deep data"),
@@ -1452,7 +1454,7 @@ class SOMPZEstimatorBase(CatEstimator):
         self.model=None
         self.model = self.open_model(**self.config)  # None
         first = True
-        iter1 = self.input_iterator('data', groupname=self.config.groupname)
+        iter1 = self.input_iterator('data', groupname=self.config.hdf5_groupname)
         self._output_handle = None
         for s, e, test_data in iter1:
             print(f"Process {self.rank} running creator on chunk {s} - {e}", flush=True)
