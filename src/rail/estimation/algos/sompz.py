@@ -485,22 +485,18 @@ class SOMPZInformer(CatInformer):
         if 'pool' in self.config.keys():
             self.pool, self.nprocess = self.config["pool"]
         else:
+            print("pool not specified, setting pool to None")
             self.pool = None
             self.nprocess=0
 
         print(f"Training SOM of shape {self.config.som_shape}...", flush=True)
-        if os.path.isfile(self.config['model']):
-            with open(self.config['model'], 'rb') as f:
-                model = pickle.load(f)
-            self.add_data('model', model)
 
-        else:
-            som = somfuncs.NoiseSOM(sommetric, d_input, d_errs, learn_func,
-                                     shape=self.config.som_shape, minError=self.config.som_minerror,
-                                     wrap=self.config.som_wrap, logF=self.config.som_take_log, pool=self.config["pool"])
-            model = dict(som=som, columns=self.config.inputs,
+        som = somfuncs.NoiseSOM(sommetric, d_input, d_errs, learn_func,
+                                shape=self.config.som_shape, minError=self.config.som_minerror,
+                                wrap=self.config.som_wrap, logF=self.config.som_take_log, pool=self.pool)
+        model = dict(som=som, columns=self.config.inputs,
                      err_columns=self.config.input_errs)
-            self.add_data('model', model)
+        self.add_data('model', model)
 
     def inform(self, input_data):
         self.set_data('input_data', input_data)
