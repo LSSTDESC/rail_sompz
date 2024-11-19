@@ -1,39 +1,40 @@
 """
 Port of SOMPZ
 """
-import pdb
+# import pdb
 import os
 import numpy as np
 # import sys
 import qp
 from ceci.config import StageParameter as Param
-from rail.core.data import TableHandle, ModelHandle, FitsHandle, QPHandle, Hdf5Handle
+from rail.core.data import TableHandle, ModelHandle, QPHandle, Hdf5Handle
 from rail.estimation.estimator import CatEstimator, CatInformer
-from rail.core.utils import RAILDIR
+# from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
 from rail.core.common_params import SHARED_PARAMS
-from multiprocessing import Pool
+# from multiprocessing import Pool
 
 # import astropy.io.fits as fits  # TODO handle file i/o with rail
 import pandas as pd
 import matplotlib.pyplot as plt
-import functools
-import   h5py
+# import functools
+import h5py
 import pickle
-from abc import ABC
+# from abc import ABC
 import gc
+
 
 class Pickableclassify:
     def __init__(self, som, flux, fluxerr, inds):
-        self.som = som 
+        self.som = som
         self.flux = flux
         self.inds = inds
         self.flux_err = fluxerr
+
     def __call__(self, ind):
-        cells_test, dist_test  = self.som.classify(self.flux[self.inds[ind]], self.flux_err[self.inds[ind]])
+        cells_test, dist_test = self.som.classify(self.flux[self.inds[ind]], self.flux_err[self.inds[ind]])
         return cells_test, dist_test
-    
-        
+
 
 def_bands = ["u", "g", "r", "i", "z", "y"]
 default_bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0]
@@ -211,6 +212,7 @@ def histogram(data, deep_data, key, cells, cell_weights, pcchat, overlap_weighte
             hist = hist / normalization
         return hist
 
+
 def histogram_from_fullpz(df, key, overlap_weighted, bin_edges, full_pz_end=6.00, full_pz_npts=601):
     """Preserve bins from Laigle"""
     dz_laigle = full_pz_end / (full_pz_npts - 1)
@@ -246,6 +248,7 @@ def histogram_from_fullpz(df, key, overlap_weighted, bin_edges, full_pz_end=6.00
     hist = hist / area
 
     return hist
+
 
 def redshift_distributions_wide(data,
                                 deep_data,
@@ -419,7 +422,6 @@ def plot_nz(hists, zbins, outfile, xlimits=(0, 2), ylimits=(0, 3.25)):
     plt.close()
 
 
-
 class SOMPZInformer(CatInformer):
     """Inform stage for SOMPZEstimator
     """
@@ -427,7 +429,7 @@ class SOMPZInformer(CatInformer):
     config_options = CatInformer.config_options.copy()
     config_options.update(redshift_col=SHARED_PARAMS,
                           hdf5_groupname=SHARED_PARAMS,
-                          #groupname=Param(str, "photometry", msg="hdf5_groupname for ata"),
+                          # groupname=Param(str, "photometry", msg="hdf5_groupname for ata"),
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for data"),
                           zero_points=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for data, if needed"),
@@ -436,16 +438,15 @@ class SOMPZInformer(CatInformer):
                           som_wrap=Param(bool, False, msg="flag to set whether the SOM has periodic boundary conditions"),
                           som_take_log=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for som"),
                           convert_to_flux=Param(bool, False, msg="flag for whether to convert input columns to fluxes for data"
-                                                     "set to true if inputs are mags and to False if inputs are already fluxes"),
+                                                "set to true if inputs are mags and to False if inputs are already fluxes"),
                           set_threshold=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
                           thresh_val=Param(float, 1.e-5, msg="threshold value for set_threshold for data"),
                           thresh_val_err=Param(float, 1.e-5, msg="threshold value for set_threshold for data error"))
 
     inputs = [('input_data', TableHandle),
               ]
-    outputs = [('model', ModelHandle), 
-            ]
-
+    outputs = [('model', ModelHandle),
+               ]
 
     def run(self):
 
@@ -479,7 +480,6 @@ class SOMPZInformer(CatInformer):
                 errmask = (d_errs[:, i] < self.config.thresh_val_err)
                 d_errs[:, i][errmask] = self.config.thresh_val_err
 
-
         sommetric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         learn_func = somfuncs.hFunc(ngal, sigma=(30, 1))
 
@@ -488,13 +488,13 @@ class SOMPZInformer(CatInformer):
         else:
             print("pool not specified, setting pool to None")
             self.pool = None
-            self.nprocess=0
+            self.nprocess = 0
 
         print(f"Training SOM of shape {self.config.som_shape}...", flush=True)
 
         som = somfuncs.NoiseSOM(sommetric, d_input, d_errs, learn_func,
                                 shape=self.config.som_shape, minError=self.config.som_minerror,
-                                wrap=self.config.som_wrap, logF=self.config.som_take_log, pool=self.pool)
+                                wrap=self.config.som_wrap, logF=self.config.som_take_log, pool=self.config.pool)
         model = dict(som=som, columns=self.config.inputs,
                      err_columns=self.config.input_errs)
         self.add_data('model', model)
@@ -516,7 +516,7 @@ class SOMPZEstimator(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
-#                          data_path=Param(str, "directory", msg="directory for output files"),
+                          # data_path=Param(str, "directory", msg="directory for output files"),
                           spec_groupname=Param(str, "photometry", msg="hdf5_groupname for spec_data"),
                           balrog_groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
                           wide_groupname=Param(str, "photometry", msg="hdf5_groupname for wide_data"),
@@ -545,15 +545,15 @@ class SOMPZEstimator(CatEstimator):
                           debug=Param(bool, False, msg="boolean reducing dataset size for quick debuggin"))
 
     inputs = [('deep_model', ModelHandle),
-             ('wide_model', ModelHandle),
+              ('wide_model', ModelHandle),
               ('spec_data', TableHandle),
               ('balrog_data', TableHandle),
               ('wide_data', TableHandle)]
     outputs = [('nz', QPHandle),
                ('spec_data_deep_assignment', Hdf5Handle),
-               ('spec_data_wide_assignment', Hdf5Handle),               
+               ('spec_data_wide_assignment', Hdf5Handle),
                ('balrog_data_deep_assignment', Hdf5Handle),
-               ('balrog_data_wide_assignment', Hdf5Handle),               
+               ('balrog_data_wide_assignment', Hdf5Handle),
                ('wide_data_assignment', Hdf5Handle),
                ('pz_c', Hdf5Handle),
                ('pz_chat', Hdf5Handle),
@@ -568,7 +568,7 @@ class SOMPZEstimator(CatEstimator):
             self.pool, self.nprocess = self.config["pool"]
         else:
             self.pool = None
-            self.nprocess=0
+            self.nprocess = 0
         # check on bands, errs, and prior band
         if len(self.config.inputs_deep) != len(self.config.input_errs_deep):  # pragma: no cover
             raise ValueError("Number of inputs_deep specified in inputs_deep must be equal to number of mag errors specified in input_errs_deep!")
@@ -626,12 +626,12 @@ class SOMPZEstimator(CatEstimator):
         # output_path = './'  # TODO make kwarg
         nTrain = flux.shape[0]
         # som_weights = np.load(infile_som, allow_pickle=True)
-        if somstr=="deep":
-                som_weights = self.deep_model['som'].weights
-        elif somstr=="wide":
-                som_weights = self.wide_model['som'].weights
+        if somstr == "deep":
+            som_weights = self.deep_model['som'].weights
+        elif somstr == "wide":
+            som_weights = self.wide_model['som'].weights
         else:
-             assert(0)
+            assert (0)
         hh = somfuncs.hFunc(nTrain, sigma=(30, 1))
         metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         som = somfuncs.NoiseSOM(metric, None, None,
@@ -652,8 +652,7 @@ class SOMPZEstimator(CatEstimator):
             del pickableclassify
         else:
             cells_test, dist_test = som.classify(flux[::subsamp, :], flux_err[::subsamp, :])
-            
-            
+
         # take out numpy savez
         # outfile = os.path.join(output_path, "som_{0}_{1}x{1}_assign.npz".format(somstr,som_dim))
         # np.savez(outfile, cells=cells_test, dist=dist_test)
@@ -682,16 +681,16 @@ class SOMPZEstimator(CatEstimator):
         else:  # pragma: no cover
             # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             spec_data = self.get_data('spec_data')
-            
+
         if self.config.debug:
             spec_data = spec_data[:2000]
-        #spec_data = self.get_data('spec_data')
-        #balrog_data = self.get_data('balrog_data')
-        #wide_data = self.get_data('wide_data')
+        # spec_data = self.get_data('spec_data')
+        # balrog_data = self.get_data('balrog_data')
+        # wide_data = self.get_data('wide_data')
 
         cell_deep_spec_data = self.deep_assignment['spec_data'][0]
         cell_wide_spec_data = self.wide_assignment['spec_data'][0]
-        #pdb.set_trace()
+        # pdb.set_trace()
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data,
                                          'cell_wide': cell_wide_spec_data})
@@ -720,7 +719,7 @@ class SOMPZEstimator(CatEstimator):
         cell_wide_wide_data = self.wide_assignment['wide_data'][0]
         wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data})
 
-        # compute p(z|chat) \propto sum_c p(z|c) p(c|chat)        
+        # compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
         pz_chat = np.array(histogram(wide_data_for_pz,
                                      spec_data_for_pz,
                                      key=key,
@@ -736,7 +735,6 @@ class SOMPZEstimator(CatEstimator):
         # np.savez(outfile, pz_chat=pz_chat)
         pzchatdict = dict(pz_chat=pz_chat)
         self.add_data('pz_chat', pzchatdict)
-
 
         # assign sample to tomographic bins
         # bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # this is now a config input
@@ -783,17 +781,17 @@ class SOMPZEstimator(CatEstimator):
         Inputs: tomo_bins_wide (returned by estimate pdf)
         Returns: wide_tomo_bins (dict)
         """
-        #This code does not handel the fact that som of the SOM has no balrog sample covered, thereby should not be included in the  calculation
-        assert(0)
+        # This code does not handel the fact that som of the SOM has no balrog sample covered, thereby should not be included in the  calculation
+        assert (0)
         wide_assign = self.widedict['cells']
-        #print(tomo_bins_wide)
+        # print(tomo_bins_wide)
 
-        #nbins = len(self.config.bin_edges)-1
-        #ngal = len(wide_assign)
-        #tomo_mask = np.zeros(ngal, dtype=int)
-        tmp_cells = np.concatenate([tomo_bins_wide[nbin][:,0].astype(np.int32) for nbin in tomo_bins_wide])
-        tmp_weights = np.concatenate([tomo_bins_wide[nbin][:,1] for nbin in tomo_bins_wide])
-        tmp_bins = np.concatenate([(np.ones(len(tomo_bins_wide[nbin][:,0])) * nbin).astype(int) for nbin in tomo_bins_wide])
+        # nbins = len(self.config.bin_edges)-1
+        # ngal = len(wide_assign)
+        # tomo_mask = np.zeros(ngal, dtype=int)
+        tmp_cells = np.concatenate([tomo_bins_wide[nbin][:, 0].astype(np.int32) for nbin in tomo_bins_wide])
+        tmp_weights = np.concatenate([tomo_bins_wide[nbin][:, 1] for nbin in tomo_bins_wide])
+        tmp_bins = np.concatenate([(np.ones(len(tomo_bins_wide[nbin][:, 0])) * nbin).astype(int) for nbin in tomo_bins_wide])
         sortidx = np.argsort(tmp_cells)
         indices = sortidx[np.searchsorted(tmp_cells, wide_assign, sorter=sortidx)]
         tomo_bins = tmp_bins[indices]
@@ -806,7 +804,7 @@ class SOMPZEstimator(CatEstimator):
         """
         code that gets run once
         """
-        
+
         self._output_handle = None
 
     def _do_chunk_output(self):
@@ -818,7 +816,7 @@ class SOMPZEstimator(CatEstimator):
 
     def _finalize_run(self):
         self._output_handle.finalize_write()
-        
+
     def _process_chunk(self, start, end, data, first):
         """
         Run SOMPZ on a chunk of data
@@ -852,7 +850,7 @@ class SOMPZEstimator(CatEstimator):
         print('TODO store this info')
         output_handle = None
         self._do_chunk_output(output_handle, start, end, first)
-        
+
     def run(self,):
         self.deep_model, self.wide_model = self.open_model(**self.config)  # None
         print('initialized model', self.deep_model, self.wide_model)
@@ -869,23 +867,23 @@ class SOMPZEstimator(CatEstimator):
         if self.config.wide_groupname:
             wide_data = self.get_data('wide_data')[self.config.wide_groupname]
         else:  # pragma: no cover
-            wide_data = self.get_data('wide_data')            
+            wide_data = self.get_data('wide_data')
 
-        #iterator = self.input_iterator("wide_data")
-        #first = True
-        #self._initialize_run() # TODO implement
-        #self._output_handle = None # TODO consider handle for dict to store all outputs
-        #for s, e, data_chunk in iterator:
+        # iterator = self.input_iterator("wide_data")
+        # first = True
+        # self._initialize_run() # TODO implement
+        # self._output_handle = None # TODO consider handle for dict to store all outputs
+        # for s, e, data_chunk in iterator:
         #    if self.rank == 0:
         #        print(f"Process {self.rank} running estimator on chunk {s} - {e}")
         #    self._process_chunk(s, e, data_chunk, first)
         #    first = False
         #    gc.collect()
 
-        #print('You need to do spec_data and balrog_data')
-        #self._finalize_run()
-        #assert False,'below this line is code that needs to be updated'
-        
+        # print('You need to do spec_data and balrog_data')
+        # self._finalize_run()
+        # assert False,'below this line is code that needs to be updated'
+
         samples = [spec_data, balrog_data, wide_data]
         # NOTE: DO NOT CHANGE NAMES OF 'labels' below! They are used
         # in the naming of the outputs of the stage!
@@ -900,7 +898,7 @@ class SOMPZEstimator(CatEstimator):
             if i <= 1:
                 outlabel = f"{label}_deep_assignment"
                 if os.path.isfile(self.config[outlabel]):
-                    temp = h5py.File(self.config[outlabel], 'r') 
+                    temp = h5py.File(self.config[outlabel], 'r')
                     cells_deep, dist_deep = temp['cells'][:], temp['dist'][:]
                     self.deep_assignment[label] = (cells_deep, dist_deep)
                     tmpdict = dict(cells=cells_deep, dist=dist_deep)
@@ -997,8 +995,8 @@ class SOMPZEstimator(CatEstimator):
             pickle.dump(tomo_bins_wide, f)
 
         # Add in computation of which tomo bin each wide galaxy is mapped to
-        #wide_tomo_bin_dict = self._find_wide_tomo_bins(tomo_bins_wide)
-        #self.add_data("tomo_bin_mask_wide_data", wide_tomo_bin_dict)
+        # wide_tomo_bin_dict = self._find_wide_tomo_bins(tomo_bins_wide)
+        # self.add_data("tomo_bin_mask_wide_data", wide_tomo_bin_dict)
 
         # self.nz = nz
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
@@ -1018,25 +1016,25 @@ class SOMPZEstimator(CatEstimator):
         self.finalize()
         return
 
+
 class SOMPZPzc(CatEstimator):
     """Calcaulate pzc
     """
     name = "SOMPZPzc"
     config_options = CatEstimator.config_options.copy()
-    config_options.update(
-                          inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
+    config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           redshift_col=SHARED_PARAMS,
+                          deep_gropuname=Param(str, "photometry", msg="hdf5 groupname for deep file"),
                           bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
                           deep_som_size=Param(int, 4096, msg="number of deep som"),
                           specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
-
-            )
+                          )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
-             ]
+              ]
     outputs = [('pz_c', Hdf5Handle)]
 
     def __init__(self, args, **kwargs):
@@ -1046,25 +1044,30 @@ class SOMPZPzc(CatEstimator):
         # check on bands, errs, and prior band
 
     def run(self):
-        spec_data = self.get_data('spec_data')
+        if self.config.deep_groupname:
+            spec_data = self.get_data('spec_data')[self.config.deep_groupname]
+        else:  # pragma: no cover
+            spec_data = self.get_data('spec_data')
         cell_deep_spec_data = self.get_data('cell_deep_spec_data')
-        key =  self.config.specz_name
+        key = self.config.specz_name
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
-                                 'cell_deep': cell_deep_spec_data['cells']})
+                                         'cell_deep': cell_deep_spec_data['cells']})
         all_deep_cells = np.arange(self.config['deep_som_size'])
-        pz_c =  np.array(get_deep_histograms(None,  # this arg is not currently used in get_deep_histograms
-                         spec_data_for_pz,
-                         key=key,
-                         cells=all_deep_cells,
-                         overlap_weighted_pzc=False,
-                         bins=zbins))
+        pz_c = np.array(get_deep_histograms(None,  # this arg is not currently used in get_deep_histograms
+                                            spec_data_for_pz,
+                                            key=key,
+                                            cells=all_deep_cells,
+                                            overlap_weighted_pzc=False,
+                                            bins=zbins))
         pzcdict = dict(pz_c=pz_c)
         self.add_data('pz_c', pzcdict)
 
-    def estimate(self):
+    def estimate(self, spec_data, cell_deep_spec_data):
+        spec_data = self.set_data('spec_data', spec_data)
+        cell_deep_spec_data = self.set_data('cell_deep_spec_data', cell_deep_spec_data)
         self.run()
-        self.finalize() 
+        self.finalize()
 
 
 class SOMPZPzchat(CatEstimator):
@@ -1072,8 +1075,7 @@ class SOMPZPzchat(CatEstimator):
     """
     name = "SOMPZPzchat"
     config_options = CatEstimator.config_options.copy()
-    config_options.update(
-                          inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
+    config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           redshift_col=SHARED_PARAMS,
                           bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
@@ -1082,14 +1084,13 @@ class SOMPZPzchat(CatEstimator):
                           wide_som_size=Param(int, 1024, msg="number of deep som"),
                           deep_som_size=Param(int, 4096, msg="number of deep som"),
                           specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
-
-            )
+                          )
     inputs = [('spec_data', TableHandle),
-               ('cell_deep_spec_data', TableHandle),
+              ('cell_deep_spec_data', TableHandle),
               ('cell_wide_wide_data', TableHandle),
               ('pz_c', Hdf5Handle),
-                ('pc_chat', Hdf5Handle),
-             ]
+              ('pc_chat', Hdf5Handle),
+              ]
     outputs = [('pz_chat', Hdf5Handle)]
 
     def __init__(self, args, **kwargs):
@@ -1101,12 +1102,12 @@ class SOMPZPzchat(CatEstimator):
     def run(self):
         spec_data = self.get_data('spec_data')
         cell_wide_wide_data = self.get_data('cell_wide_wide_data')
-        cell_deep_spec_data= self.get_data('cell_deep_spec_data')
+        cell_deep_spec_data = self.get_data('cell_deep_spec_data')
         pc_chat = self.get_data('pc_chat')['pc_chat'][:]
-        key =  self.config.specz_name
+        key = self.config.specz_name
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
-                                 'cell_deep': cell_deep_spec_data['cells']})
+                                         'cell_deep': cell_deep_spec_data['cells']})
 
         wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data['cells']})
 
@@ -1114,38 +1115,42 @@ class SOMPZPzchat(CatEstimator):
         all_deep_cells = np.arange(self.config['deep_som_size'])
 
         pz_chat = np.array(histogram(wide_data_for_pz,
-                            spec_data_for_pz,
-                            key=key,
-                                pcchat=pc_chat,
-                                cells=all_wide_cells,
-                                cell_weights=np.ones(len(all_wide_cells)),
-                                deep_som_size=self.config['deep_som_size'],
-                                overlap_weighted_pzc=False,
-                                bins=zbins,
-                                individual_chat=True))
+                                     spec_data_for_pz,
+                                     key=key,
+                                     pcchat=pc_chat,
+                                     cells=all_wide_cells,
+                                     cell_weights=np.ones(len(all_wide_cells)),
+                                     deep_som_size=self.config['deep_som_size'],
+                                     overlap_weighted_pzc=False,
+                                     bins=zbins,
+                                     individual_chat=True))
         pzchatdict = dict(pz_chat=pz_chat)
         self.add_data('pz_chat', pzchatdict)
 
-    def estimate(self):
+    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_wide_data, pz_c, pc_chat):
+        self.set_data("spec_data", spec_data)
+        self.set_data("cell_deep_spec_data", cell_deep_spec_data)
+        self.set_data("cell_wide_wide_data", cell_wide_wide_data)
+        self.set_data("pz_c", pz_c)
+        self.set_data("pc_chat", pc_chat)
         self.run()
-        self.finalize() 
+        self.finalize()
+
 
 class SOMPZPc_chat(CatEstimator):
     """Calcaulate p(c|chat)
     """
     name = "SOMPZPc_chat"
     config_options = CatEstimator.config_options.copy()
-    config_options.update(
-                          inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
+    config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           redshift_col=SHARED_PARAMS,
                           deep_som_size=Param(int, 4096, msg="number of deep som"),
                           wide_som_size=Param(int, 1024, msg="number of wide som"),
                           specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
-
-            )
+                          )
     inputs = [('cell_deep_balrog_data', TableHandle),
               ('cell_wide_balrog_data', TableHandle),
-             ]
+              ]
     outputs = [('pc_chat', Hdf5Handle)]
 
     def __init__(self, args, **kwargs):
@@ -1158,16 +1163,18 @@ class SOMPZPc_chat(CatEstimator):
         cell_deep_balrog_data = self.get_data('cell_deep_balrog_data')
         cell_wide_balrog_data = self.get_data('cell_wide_balrog_data')
         pc_chat = calculate_pcchat(self.config['deep_som_size'],
-                           self.config['wide_som_size'],
-                            cell_deep_balrog_data['cells'],  # balrog_data['cell_deep'],#.values,
-                            cell_wide_balrog_data['cells'],  # balrog_data['cell_wide'],#.values,
-                            np.ones(len(cell_wide_balrog_data['cells'])))
+                                   self.config['wide_som_size'],
+                                   cell_deep_balrog_data['cells'],  # balrog_data['cell_deep'],#.values,
+                                   cell_wide_balrog_data['cells'],  # balrog_data['cell_wide'],#.values,
+                                   np.ones(len(cell_wide_balrog_data['cells'])))
         pcchatdict = dict(pc_chat=pc_chat)
         self.add_data('pc_chat', pcchatdict)
 
-    def estimate(self):
+    def estimate(self, cell_deep_balrog_data, cell_wide_balrog_data):
+        self.set_data('cell_deep_balrog_data', cell_deep_balrog_data)
+        self.set_data('cell_wide_balrog_data', cell_wide_balrog_data)
         self.run()
-        self.finalize() 
+        self.finalize()
 
 
 class SOMPZTomobin(CatEstimator):
@@ -1175,8 +1182,7 @@ class SOMPZTomobin(CatEstimator):
     """
     name = "SOMPZTomobin"
     config_options = CatEstimator.config_options.copy()
-    config_options.update(
-                          inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
+    config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           redshift_col=SHARED_PARAMS,
                           bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
@@ -1185,12 +1191,11 @@ class SOMPZTomobin(CatEstimator):
                           wide_som_size=Param(int, 1024, msg="number of deep som"),
                           deep_som_size=Param(int, 4096, msg="number of deep som"),
                           specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
-
-            )
+                          )
     inputs = [('spec_data', TableHandle),
-               ('cell_deep_spec_data', TableHandle),
-               ('cell_wide_spec_data', TableHandle),
-             ]
+              ('cell_deep_spec_data', TableHandle),
+              ('cell_wide_spec_data', TableHandle),
+              ]
     outputs = [('tomo_bins_wide', Hdf5Handle)]
 
     def __init__(self, args, **kwargs):
@@ -1201,32 +1206,34 @@ class SOMPZTomobin(CatEstimator):
 
     def run(self):
         spec_data = self.get_data('spec_data')
-        cell_deep_spec_data= self.get_data('cell_deep_spec_data')
-        cell_wide_spec_data=  self.get_data('cell_wide_spec_data')
-        pc_chat = self.get_data('pc_chat')['pc_chat'][:]
-        key =  self.config.specz_name
+        cell_deep_spec_data = self.get_data('cell_deep_spec_data')
+        cell_wide_spec_data = self.get_data('cell_wide_spec_data')
+        # pc_chat = self.get_data('pc_chat')['pc_chat'][:]
+        key = self.config.specz_name
 
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
-                                 'cell_deep': cell_deep_spec_data['cells'], 
-                                 'cell_wide': cell_wide_spec_data['cells']})
+                                         'cell_deep': cell_deep_spec_data['cells'],
+                                         'cell_wide': cell_wide_spec_data['cells']})
         tomo_bins_wide_dict = bin_assignment_spec(spec_data_for_pz,
-                                          self.config['deep_som_size'],
-                                          self.config['wide_som_size'],
-                                          bin_edges=self.config['bin_edges'],
-                                          key_z=key,
-                                          key_cells_wide='cell_wide')
+                                                  self.config['deep_som_size'],
+                                                  self.config['wide_som_size'],
+                                                  bin_edges=self.config['bin_edges'],
+                                                  key_z=key,
+                                                  key_cells_wide='cell_wide')
         tomobinswide = tomo_bins_wide_2d(tomo_bins_wide_dict)
-        tomobinsmapping = -1*np.ones((self.config['wide_som_size'], 2)) 
+        tomobinsmapping = -1 * np.ones((self.config['wide_som_size'], 2))
         for key in tomobinswide:
-                tomobinsmapping[tomobinswide[key][:,0].astype(int),0]=key
-                tomobinsmapping[tomobinswide[key][:,0].astype(int),1]=tomobinswide[key][:,1]
+            tomobinsmapping[tomobinswide[key][:, 0].astype(int), 0] = key
+            tomobinsmapping[tomobinswide[key][:, 0].astype(int), 1] = tomobinswide[key][:, 1]
 
         self.add_data('tomo_bins_wide', dict(tomo_bins_wide=tomobinsmapping))
 
-    def estimate(self):
+    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_spec_data):
+        self.set_data('spec_data', spec_data)
+        self.set_data('cell_deep_spec_data', cell_deep_spec_data)
+        self.set_data('cell_wide_spec_data', cell_wide_spec_data)
         self.run()
-        self.finalize() 
-
+        self.finalize()
 
 
 class SOMPZnz(CatEstimator):
@@ -1234,8 +1241,7 @@ class SOMPZnz(CatEstimator):
     """
     name = "SOMPZnz"
     config_options = CatEstimator.config_options.copy()
-    config_options.update(
-                          inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
+    config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           redshift_col=SHARED_PARAMS,
                           bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
@@ -1244,14 +1250,13 @@ class SOMPZnz(CatEstimator):
                           wide_som_size=Param(int, 1024, msg="number of deep som"),
                           deep_som_size=Param(int, 4096, msg="number of deep som"),
                           specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
-
-            )
+                          )
     inputs = [('spec_data', TableHandle),
-               ('cell_deep_spec_data', TableHandle),
+              ('cell_deep_spec_data', TableHandle),
               ('cell_wide_wide_data', TableHandle),
               ('tomo_bins_wide', Hdf5Handle),
-                ('pc_chat', Hdf5Handle),
-             ]
+              ('pc_chat', Hdf5Handle),
+              ]
     outputs = [('nz', QPHandle)]
 
     def __init__(self, args, **kwargs):
@@ -1263,20 +1268,20 @@ class SOMPZnz(CatEstimator):
     def run(self):
         spec_data = self.get_data('spec_data')
         cell_wide_wide_data = self.get_data('cell_wide_wide_data')
-        cell_deep_spec_data= self.get_data('cell_deep_spec_data')
+        cell_deep_spec_data = self.get_data('cell_deep_spec_data')
         tomo_bins_wide_in = self.get_data('tomo_bins_wide')['tomo_bins_wide'][:]
-        tomo_bins_wide={}
-        for i in np.unique(tomo_bins_wide_in[:,0]):
-             if i<0:
+        tomo_bins_wide = {}
+        for i in np.unique(tomo_bins_wide_in[:, 0]):
+            if i < 0:
                 continue
-             inarr1 = np.where(tomo_bins_wide_in[:,0]==i)[0]
-             inarr2 = tomo_bins_wide_in[inarr1,1] 
-             tomo_bins_wide[i] = np.array([inarr1, inarr2]).T 
+            inarr1 = np.where(tomo_bins_wide_in[:, 0] == i)[0]
+            inarr2 = tomo_bins_wide_in[inarr1, 1]
+            tomo_bins_wide[i] = np.array([inarr1, inarr2]).T
         pc_chat = self.get_data('pc_chat')['pc_chat'][:]
-        key =  self.config.specz_name
+        key = self.config.specz_name
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
-                                 'cell_deep': cell_deep_spec_data['cells']})
+                                         'cell_deep': cell_deep_spec_data['cells']})
 
         wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data['cells']})
 
@@ -1297,12 +1302,14 @@ class SOMPZnz(CatEstimator):
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
 
-
-
-    def estimate(self):
+    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_wide_data, tomo_bins_wide, pc_chat):
+        spec_data = self.set_data('spec_data', spec_data)
+        cell_deep_spec_data = self.set_data('cell_deep_spec_data', cell_deep_spec_data)
+        cell_wide_wide_data = self.set_data('cell_wide_wide_data', cell_wide_wide_data)
+        tomo_bins_wide = self.set_data('tomo_bins_wide', tomo_bins_wide)
+        pc_chat = self.set_data('pc_chat', pc_chat)
         self.run()
-        self.finalize() 
-
+        self.finalize()
 
 
 class SOMPZEstimatorBase(CatEstimator):
@@ -1310,11 +1317,10 @@ class SOMPZEstimatorBase(CatEstimator):
     """
     name = "SOMPZEstimatorBase"
     config_options = CatEstimator.config_options.copy()
-    config_options.update(
-                          chunk_size=SHARED_PARAMS,
+    config_options.update(chunk_size=SHARED_PARAMS,
                           redshift_col=SHARED_PARAMS,
                           hdf5_groupname=SHARED_PARAMS,
-                          #groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
+                          # groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
                           specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for deep data"),
@@ -1332,8 +1338,8 @@ class SOMPZEstimatorBase(CatEstimator):
     inputs = [('model', ModelHandle),
               ('data', TableHandle),]
     outputs = [
-               ('assignment', Hdf5Handle),
-              ]
+        ('assignment', Hdf5Handle),
+    ]
 
     def __init__(self, args, **kwargs):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
@@ -1373,8 +1379,6 @@ class SOMPZEstimatorBase(CatEstimator):
 
         return self.model
 
-
-
     def _assign_som(self, flux, flux_err):
         som_dim = self.config.som_shape[0]
         # output_path = './'  # TODO make kwarg
@@ -1394,9 +1398,6 @@ class SOMPZEstimatorBase(CatEstimator):
 
         return cells_test, dist_test
 
-    def _finalize_run(self):
-        self._output_handle.finalize_write()
-        
     def _process_chunk(self, start, end, data, first):
         """
         Run SOMPZ on a chunk of data
@@ -1445,16 +1446,21 @@ class SOMPZEstimatorBase(CatEstimator):
 
         """
         if first:
-            self._output_handle = self.add_handle('assignment', data = output_chunk)
-            self._output_handle.initialize_write(self._input_length, communicator = self.comm)
+            self._output_handle = self.add_handle('assignment', data=output_chunk)
+            self._output_handle.initialize_write(self._input_length, communicator=self.comm)
         self._output_handle.set_data(output_chunk, partial=True)
-        self._output_handle.write_chunk(start, end) 
-        
-    def run(self,):
-        self.model=None
+        self._output_handle.write_chunk(start, end)
+
+    def run(self):
+        if self.config.hdf5_groupname:
+            data = self.get_data('data')[self.config.hdf5_groupname]
+        else:  # pragma: no cover
+            data = self.get_data('data')
+        self.model = None
         self.model = self.open_model(**self.config)  # None
         first = True
-        iter1 = self.input_iterator('data', groupname=self.config.hdf5_groupname)
+        # iter1 = self.input_iterator('data', groupname=self.config.hdf5_groupname)
+        iter1 = self.input_iterator('data')
         self._output_handle = None
         for s, e, test_data in iter1:
             print(f"Process {self.rank} running creator on chunk {s} - {e}", flush=True)
@@ -1465,8 +1471,9 @@ class SOMPZEstimatorBase(CatEstimator):
             self.comm.Barrier()
         self._finalize_run()
 
-    def estimate(self,data):
-        self.set_data("data", Hdf5Handle('data', path=data), do_read=False)
+    def estimate(self, data):
+        # self.set_data("data", Hdf5Handle('data', path=data), do_read=False)
+        self.set_data('data', data)
         self.run()
         self.finalize()
         return
@@ -1479,6 +1486,7 @@ class SOMPZEstimatorBase(CatEstimator):
 
         """
         self._output_handle.finalize_write()
+
 
 class SOMPZEstimatorWide(SOMPZEstimatorBase):
     """CatEstimator subclass to compute redshift PDFs for SOMPZ
@@ -1518,12 +1526,14 @@ class SOMPZEstimatorWide(SOMPZEstimatorBase):
 
         return self.model
 
+
 class SOMPZEstimatorDeep(SOMPZEstimatorBase):
     """CatEstimator subclass to compute redshift PDFs for SOMPZ
     """
     name = "SOMPZEstimatorDeep"
     inputs = [('deep_model', ModelHandle),
               ('data', TableHandle),]
+
     def open_model(self, **kwargs):
         """Load the model and/or attach it to this Creator.
 
@@ -1553,5 +1563,3 @@ class SOMPZEstimatorDeep(SOMPZEstimatorBase):
                 self.model = self.set_data("deep_model", model)
 
         return self.model
-
-
