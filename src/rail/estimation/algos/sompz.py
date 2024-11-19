@@ -631,7 +631,8 @@ class SOMPZEstimator(CatEstimator):
         elif somstr == "wide":
             som_weights = self.wide_model['som'].weights
         else:
-            assert (0)
+            # assert (0)
+            raise ValueError(f"valid SOM values are 'deep' and 'wide', {somstr} is not valid")
         hh = somfuncs.hFunc(nTrain, sigma=(30, 1))
         metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         som = somfuncs.NoiseSOM(metric, None, None,
@@ -781,8 +782,9 @@ class SOMPZEstimator(CatEstimator):
         Inputs: tomo_bins_wide (returned by estimate pdf)
         Returns: wide_tomo_bins (dict)
         """
-        # This code does not handel the fact that som of the SOM has no balrog sample covered, thereby should not be included in the  calculation
-        assert (0)
+        # This code does not handle the fact that som of the SOM has no balrog sample covered, thereby should not be included in the  calculation
+        # assert (0)
+        raise ValueError("this code is no longer used")
         wide_assign = self.widedict['cells']
         # print(tomo_bins_wide)
 
@@ -812,7 +814,8 @@ class SOMPZEstimator(CatEstimator):
         code that gets run once
         """
         print('TODO')
-        assert False
+        # assert False
+        raise NotImplementedError("_do_chunk_output not yet implemented")
 
     def _finalize_run(self):
         self._output_handle.finalize_write()
