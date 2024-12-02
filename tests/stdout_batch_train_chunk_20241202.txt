@@ -1,0 +1,14 @@
+(rail) jmyles@perlmutter:login33:~/repositories/rail_sompz/tests> python batch_train_chunk.py ./test.yaml
+nprocess:  10
+Inserting handle into data store.  input_data: None, som_informer
+5000 galaxies in sample
+Training SOM of shape (64, 64)...
+  0%|                                                                                                          | 0/5000 [00:00<?, ?it/s]/global/u2/j/jmyles/repositories/rail_sompz/src/rail/estimation/algos/som.py:423: RuntimeWarning: overflow encountered in exp
+  w = np.minimum(np.exp(2 * (vf - 4)), 1000.)
+100%|███████████████████████████████████████████████████████████████████████████████████████████████| 5000/5000 [00:54<00:00, 91.37it/s]
+Inserting handle into data store.  model_som_informer: out/inprogress_CARDINAL_model_test_deep_64.pkl, som_informer
+deep done
+5000 galaxies in sample
+Training SOM of shape (32, 32)...
+100%|██████████████████████████████████████████████████████████████████████████████████████████████| 5000/5000 [00:16<00:00, 303.01it/s]
+Inserting handle into data store.  model_som_informer: out/inprogress_CARDINAL_model_test_wide_32.pkl, som_informer
