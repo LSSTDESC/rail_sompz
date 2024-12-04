@@ -116,12 +116,11 @@ som_params_wide = dict(inputs=widebands, input_errs=wideerrs,
 from multiprocessing import Pool 
 import multiprocessing
 nprocess=yamlfile['nprocess']
-print("total process", nprocess, flush=True)
+print("nprocess: ", nprocess, flush=True)
 with Pool(nprocess) as p:
     if not os.path.isfile(outdir+yamlfile['deepmodel'].format(yamlfile['deep_som_size'])):
         som_inform = SOMPZInformer.make_stage(name="som_informer", 
                                               hdf5_groupname="", 
-                                              #model=outdir+yamlfile['deepmodel'].format(yamlfile['deep_som_size']),pool=[p,nprocess], **som_params_deep)
                                               model=outdir+yamlfile['deepmodel'].format(yamlfile['deep_som_size']),nproc=nprocess, **som_params_deep)
 
         som_inform.inform(balrog_data)
@@ -129,7 +128,6 @@ with Pool(nprocess) as p:
     if not os.path.isfile(outdir+yamlfile['widemodel'].format(yamlfile['wide_som_size'])):
         som_inform = SOMPZInformer.make_stage(name="som_informer", 
                                           hdf5_groupname="",
-                                          #model=outdir+yamlfile['widemodel'].format(yamlfile['wide_som_size']),pool=[p,nprocess], **som_params_wide)
                                           model=outdir+yamlfile['widemodel'].format(yamlfile['wide_som_size']),nproc=nprocess, **som_params_wide)
 
         som_inform.inform(wide_data)
