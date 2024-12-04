@@ -12,10 +12,11 @@ redwide: 'H'
 wide_som_size: 32
 deep_som_size: 64
 outpath: ./out/
+hdf5_groupname: ""
 deepmodel: "CARDINAL_model_test_deep_{0}.pkl"
 widemodel: "CARDINAL_model_test_wide_{0}.pkl"
 specz_name: 'z'
 specz_cond: "REDSHIFT FIELD"
 Hcut: 24.96
-nprocess: 10
+nprocess: 5
 SNRcut: 18

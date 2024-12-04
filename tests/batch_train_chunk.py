@@ -45,8 +45,10 @@ with open(args.yml, 'r') as file:
 outdir = yamlfile['outpath']
 if not os.path.isdir(outdir):
     os.makedirs(outdir)
+tmpnamex = outdir+os.path.basename(yamlfile['spec_data'])+f"_{int(eval(yamlfile['NspecsubsampleN']))}.hdf5"
+print(f"name for balrog file: {tmpnamex}")
 if os.path.isfile(outdir+os.path.basename(yamlfile['spec_data'])+f"_{int(eval(yamlfile['NspecsubsampleN']))}.hdf5"):
-    balrog_data= tables_io.read(outdir+os.path.basename(yamlfile['balrog_data'])+f"_{int(eval(yamlfile['NbalrogsubsampleN']))}.hdf5") 
+    balrog_data= tables_io.read(outdir+os.path.basename(yamlfile['balrog_data'])+f"_{int(eval(yamlfile['NbalrogsubsampleN']))}.hdf5")
     wide_data= tables_io.read(outdir+os.path.basename(yamlfile['wide_data'])+f"_{int(eval(yamlfile['NwidesubsampleN']))}.hdf5")
     spec_data= tables_io.read(outdir+os.path.basename(yamlfile['spec_data'])+f"_{int(eval(yamlfile['NspecsubsampleN']))}.hdf5")
 else:
@@ -116,17 +118,21 @@ import multiprocessing
 nprocess=yamlfile['nprocess']
 print("total process", nprocess, flush=True)
 with Pool(nprocess) as p:
-        if not os.path.isfile(outdir+yamlfile['deepmodel'].format(yamlfile['deep_som_size'])):
-            som_inform = SOMPZInformer.make_stage(name="som_informer", 
-                                          groupname="", 
-                                          model=outdir+yamlfile['deepmodel'].format(yamlfile['deep_som_size']),pool=[p,nprocess], **som_params_deep)
-            som_inform.inform(balrog_data)
+    if not os.path.isfile(outdir+yamlfile['deepmodel'].format(yamlfile['deep_som_size'])):
+        som_inform = SOMPZInformer.make_stage(name="som_informer", 
+                                              hdf5_groupname="", 
+                                              #model=outdir+yamlfile['deepmodel'].format(yamlfile['deep_som_size']),pool=[p,nprocess], **som_params_deep)
+                                              model=outdir+yamlfile['deepmodel'].format(yamlfile['deep_som_size']),nproc=nprocess, **som_params_deep)
+
+        som_inform.inform(balrog_data)
         print("deep done", flush=True)
-        if not os.path.isfile(outdir+yamlfile['widemodel'].format(yamlfile['wide_som_size'])):
-            som_inform = SOMPZInformer.make_stage(name="som_informer", 
-                                          groupname="",
-                                          model=outdir+yamlfile['widemodel'].format(yamlfile['wide_som_size']),pool=[p,nprocess], **som_params_wide)
-            som_inform.inform(wide_data)
+    if not os.path.isfile(outdir+yamlfile['widemodel'].format(yamlfile['wide_som_size'])):
+        som_inform = SOMPZInformer.make_stage(name="som_informer", 
+                                          hdf5_groupname="",
+                                          #model=outdir+yamlfile['widemodel'].format(yamlfile['wide_som_size']),pool=[p,nprocess], **som_params_wide)
+                                          model=outdir+yamlfile['widemodel'].format(yamlfile['wide_som_size']),nproc=nprocess, **som_params_wide)
+
+        som_inform.inform(wide_data)
 
 
-
+    

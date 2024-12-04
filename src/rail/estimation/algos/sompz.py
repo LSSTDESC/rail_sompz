@@ -12,7 +12,7 @@ from rail.estimation.estimator import CatEstimator, CatInformer
 # from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
 from rail.core.common_params import SHARED_PARAMS
-# from multiprocessing import Pool
+from multiprocessing import Pool
 
 # import astropy.io.fits as fits  # TODO handle file i/o with rail
 import pandas as pd
@@ -429,6 +429,7 @@ class SOMPZInformer(CatInformer):
     config_options = CatInformer.config_options.copy()
     config_options.update(redshift_col=SHARED_PARAMS,
                           hdf5_groupname=SHARED_PARAMS,
+                          nproc=Param(int, 1, msg="number of processors to use"),
                           # groupname=Param(str, "photometry", msg="hdf5_groupname for ata"),
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for data"),
@@ -483,18 +484,22 @@ class SOMPZInformer(CatInformer):
         sommetric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         learn_func = somfuncs.hFunc(ngal, sigma=(30, 1))
 
-        if 'pool' in self.config.keys():
-            self.pool, self.nprocess = self.config["pool"]
-        else:
-            print("pool not specified, setting pool to None")
-            self.pool = None
-            self.nprocess = 0
-
+        # if 'pool' in self.config.keys():
+        #     self.pool, self.nprocess = self.config["pool"]
+        # else:
+        #     print("pool not specified, setting pool to None")
+        #     self.pool = None
+        #     self.nprocess = 0
+        #     self.config.pool = (None, 1)
+        pool = Pool(self.config.nproc)
+        nproc = self.config.nproc
+        pooltuple = (pool, nproc)
+        
         print(f"Training SOM of shape {self.config.som_shape}...", flush=True)
 
         som = somfuncs.NoiseSOM(sommetric, d_input, d_errs, learn_func,
                                 shape=self.config.som_shape, minError=self.config.som_minerror,
-                                wrap=self.config.som_wrap, logF=self.config.som_take_log, pool=self.config.pool)
+                                wrap=self.config.som_wrap, logF=self.config.som_take_log, pool=pooltuple)
         model = dict(som=som, columns=self.config.inputs,
                      err_columns=self.config.input_errs)
         self.add_data('model', model)
@@ -1488,6 +1493,9 @@ class SOMPZEstimatorBase(CatEstimator):
         -------
 
         """
+        #somsize = np.array(int(self.config.som_shape[0]*self.config.som_shape[1]))
+        #sizedict = dict(som_size=somsize)
+        #self._output_handle.set_data("som_size", sizedict)
         self._output_handle.finalize_write()
 
 
