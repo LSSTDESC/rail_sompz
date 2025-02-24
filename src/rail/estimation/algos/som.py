@@ -139,7 +139,7 @@ class NoiseSOM:
             minF = np.min(data, axis=0)
             maxF = np.max(data, axis=0)
 
-        nCells = np.product(shape)
+        nCells = np.prod(shape)
         if initialize == 'uniform':
             # Populate weights with random numbers
             self.weights = np.random.rand(nCells, self.N)

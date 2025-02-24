@@ -13,6 +13,7 @@ wide_som_size: 32
 deep_som_size: 64
 outpath: ./out/
 hdf5_groupname: ""
+deep_groupname: ""
 deepmodel: "CARDINAL_model_test_deep_{0}.pkl"
 widemodel: "CARDINAL_model_test_wide_{0}.pkl"
 specz_name: 'z'

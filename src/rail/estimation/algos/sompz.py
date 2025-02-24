@@ -1,7 +1,7 @@
 """
 Port of SOMPZ
 """
-# import pdb
+import pdb
 import os
 import numpy as np
 # import sys
@@ -1032,7 +1032,7 @@ class SOMPZPzc(CatEstimator):
     config_options = CatEstimator.config_options.copy()
     config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           redshift_col=SHARED_PARAMS,
-                          deep_gropuname=Param(str, "photometry", msg="hdf5 groupname for deep file"),
+                          deep_groupname=Param(str, "photometry", msg="hdf5_groupname for deep file"),
                           bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
@@ -1041,9 +1041,9 @@ class SOMPZPzc(CatEstimator):
                           specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           )
     inputs = [('spec_data', TableHandle),
-              ('cell_deep_spec_data', TableHandle),
-              ]
+              ('cell_deep_spec_data', TableHandle),]
     outputs = [('pz_c', Hdf5Handle)]
+
 
     def __init__(self, args, **kwargs):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup

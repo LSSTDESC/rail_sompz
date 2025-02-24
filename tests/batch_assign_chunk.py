@@ -1,4 +1,5 @@
 # usual imports
+import pdb
 import os
 import numpy as np
 import matplotlib.pyplot as plt
@@ -54,6 +55,9 @@ wide_data= outdir+os.path.basename(yamlfile['wide_data'])+f"_{int(eval(yamlfile[
 spec_data= outdir+os.path.basename(yamlfile['spec_data'])+f"_{int(eval(yamlfile['NspecsubsampleN']))}.hdf5"
 
 balrog_data_in = Hdf5Handle('data', path=balrog_data).read()
+wide_data_in = Hdf5Handle('data', path=wide_data).read()
+spec_data_in = Hdf5Handle('data', path=spec_data).read()
+
 zall = balrog_data_in[yamlfile['specz_name']][~np.isnan(balrog_data_in[yamlfile['specz_name']])]
 quantile = np.linspace(0,1,10)
 bin_edges = np.quantile(zall, quantile)
@@ -97,22 +101,26 @@ wide_som_params = dict(inputs=widebands, input_errs=wideerrs,
 
 
 
-samples = [spec_data, balrog_data, wide_data]
+#samples = [spec_data, balrog_data, wide_data]
+samples = [spec_data_in, balrog_data_in, wide_data_in]
 labels = ['spec_data', 'balrog_data', 'wide_data']
 
 for i, (data, label) in enumerate(zip(samples, labels)):
     
-    som_estimate_wide = SOMPZEstimatorWide.make_stage(name="sompz_estimator_wide_"+label,groupname="",
+    som_estimate_wide = SOMPZEstimatorWide.make_stage(name="sompz_estimator_wide_"+label,hdf5_groupname="",
                                  assignment= yamlfile['outpath']+label+"_wide_assignment.hdf5", data_path=yamlfile['outpath'], comm=comm, chunk_size=100, 
                                  **wide_som_params)
 
-    som_estimate_deep = SOMPZEstimatorDeep.make_stage(name="sompz_estimator_deep_"+label,groupname="",
+    som_estimate_deep = SOMPZEstimatorDeep.make_stage(name="sompz_estimator_deep_"+label,hdf5_groupname="",
                                   assignment= yamlfile['outpath']+label+"_deep_assignment.hdf5", 
                                   data_path=yamlfile['outpath'], comm=comm, chunk_size=100,**deep_som_params)
     if i<2:
+        # check if deep assignment has been stored to disk
         if not os.path.isfile(yamlfile['outpath']+label+"_deep_assignment.hdf5"):
+            #pdb.set_trace()
             _ = som_estimate_deep.estimate(data)
         comm.Barrier()
+    # check if wide assignment has been stored to disk
     if not os.path.isfile(yamlfile['outpath']+label+"_wide_assignment.hdf5"):
         _ = som_estimate_wide.estimate(data)
     comm.Barrier()  
@@ -120,7 +128,14 @@ for i, (data, label) in enumerate(zip(samples, labels)):
         if i==0:
             cell_deep_spec_data = outdir + "spec_data_deep_assignment.hdf5"
             cell_wide_spec_data  = outdir + "spec_data_wide_assignment.hdf5"
-            sOMPZPzc = SOMPZPzc.make_stage(name="sompz_pzc", specz_name='z', pz_c = outdir+"pz_c.hdf5", data_path=outdir, bin_edges=bin_edges, spec_data=spec_data,cell_deep_spec_data=cell_deep_spec_data,cell_wide_spec_data=cell_wide_spec_data)
+
+            sOMPZPzc = SOMPZPzc.make_stage(name="sompz_pzc", specz_name='z', pz_c = outdir+"pz_c.hdf5",
+                                           data_path=outdir, bin_edges=bin_edges,
+                                           deep_groupname=yamlfile['deep_groupname'],
+                                           spec_data=spec_data,
+                                           cell_deep_spec_data=cell_deep_spec_data,
+                                           cell_wide_spec_data=cell_wide_spec_data)
+            #pdb.set_trace()
             sOMPZPzc.estimate()
         if i==1:
             cell_deep_balrog_data = outdir + "balrog_data_deep_assignment.hdf5"
