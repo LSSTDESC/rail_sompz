@@ -136,22 +136,37 @@ for i, (data, label) in enumerate(zip(samples, labels)):
                                            cell_deep_spec_data=cell_deep_spec_data,
                                            cell_wide_spec_data=cell_wide_spec_data)
             #pdb.set_trace()
-            sOMPZPzc.estimate()
+            sOMPZPzc.estimate(spec_data=spec_data_in,
+                              cell_deep_spec_data=sOMPZPzc.get_data('cell_deep_spec_data'))
         if i==1:
             cell_deep_balrog_data = outdir + "balrog_data_deep_assignment.hdf5"
             cell_wide_balrog_data = outdir + "balrog_data_wide_assignment.hdf5"
             sOMPZPc_chat = SOMPZPc_chat.make_stage(specz_name='z',name="sompz_pcchat",deep_som_size=yamlfile['deep_som_size']**2, wide_som_size=yamlfile['wide_som_size']**2, pc_chat = outdir+"pc_chat.hdf5", data_path=outdir, cell_deep_balrog_data=cell_deep_balrog_data,cell_wide_balrog_data=cell_wide_balrog_data)
-            sOMPZPc_chat.estimate()
+            sOMPZPc_chat.estimate(sOMPZPc_chat.get_data('cell_deep_balrog_data'),
+                                  sOMPZPc_chat.get_data('cell_wide_balrog_data'))
 
         if i==2:
 
                 cell_wide_wide_data = outdir + "wide_data_wide_assignment.hdf5"
+                
                 sOMPZPzchat = SOMPZPzchat.make_stage(name="sompz_pzchat", pz_chat = outdir+"pz_chat.hdf5", data_path=outdir, bin_edges=bin_edges, spec_data=spec_data, cell_deep_spec_data=cell_deep_spec_data, pz_c=outdir+"pz_c.hdf5", pc_chat = outdir+"pc_chat.hdf5",cell_wide_wide_data=cell_wide_wide_data,specz_name='z')
-                sOMPZPzchat.estimate()
+                sOMPZPzchat.estimate(spec_data_in,
+                                     sOMPZPzchat.get_data('cell_deep_spec_data'),
+                                     sOMPZPzchat.get_data('cell_wide_wide_data'),
+                                     sOMPZPzchat.get_data('pz_c'),
+                                     sOMPZPzchat.get_data('pc_chat'))
+                
                 sOMPZTomobin = SOMPZTomobin.make_stage(name="sompz_tomobin",  data_path=outdir, bin_edges=bin_edges, spec_data=spec_data, cell_deep_spec_data=cell_deep_spec_data, cell_wide_spec_data=cell_wide_spec_data, tomo_bins_wide= outdir+"tomo_bins_wide.hdf5", specz_name='z')
-                sOMPZTomobin.estimate()
+                sOMPZTomobin.estimate(spec_data_in,
+                                      sOMPZTomobin.get_data('cell_deep_spec_data'),
+                                      sOMPZTomobin.get_data('cell_wide_spec_data'))
+                
                 sOMPZnz = SOMPZnz.make_stage(name="sompznz", pz_chat = outdir+"pz_chat.hdf5", data_path=outdir, bin_edges=bin_edges, spec_data=spec_data, cell_deep_spec_data=cell_deep_spec_data, pz_c=outdir+"pz_c.hdf5", pc_chat = outdir+"pc_chat.hdf5",cell_wide_wide_data=cell_wide_wide_data,specz_name='z', tomo_bins_wide=outdir+"tomo_bins_wide.hdf5",nz = outdir+"nz_sompz_estimator.hdf5")
-                sOMPZnz.estimate()
+                sOMPZnz.estimate(spec_data_in,
+                                 sOMPZnz.get_data('cell_deep_spec_data'),
+                                 sOMPZnz.get_data('cell_wide_wide_data'),
+                                 sOMPZnz.get_data('tomo_bins_wide'),
+                                 sOMPZnz.get_data('pc_chat'))
 
 
 
