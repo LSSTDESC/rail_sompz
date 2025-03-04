@@ -1460,10 +1460,6 @@ class SOMPZEstimatorBase(CatEstimator):
         self._output_handle.write_chunk(start, end)
 
     def run(self):
-        if self.config.hdf5_groupname:
-            data = self.get_data('data')[self.config.hdf5_groupname]
-        else:  # pragma: no cover
-            data = self.get_data('data')
         self.model = None
         self.model = self.open_model(**self.config)  # None
         first = True
@@ -1481,7 +1477,6 @@ class SOMPZEstimatorBase(CatEstimator):
 
     def estimate(self, data):
         # self.set_data("data", Hdf5Handle('data', path=data), do_read=False)
-        self.set_data('data', data)
         self.run()
         self.finalize()
         return
