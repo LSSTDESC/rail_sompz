@@ -1,26 +1,19 @@
 """
 Port of SOMPZ
 """
-import pdb
 import os
 import numpy as np
-# import sys
 import qp
 from ceci.config import StageParameter as Param
 from rail.core.data import TableHandle, ModelHandle, QPHandle, Hdf5Handle
 from rail.estimation.estimator import CatEstimator, CatInformer
-# from rail.core.utils import RAILDIR
 import rail.estimation.algos.som as somfuncs
 from rail.core.common_params import SHARED_PARAMS
 from multiprocessing import Pool
-
-# import astropy.io.fits as fits  # TODO handle file i/o with rail
 import pandas as pd
 import matplotlib.pyplot as plt
-# import functools
 import h5py
 import pickle
-# from abc import ABC
 import gc
 
 
@@ -434,7 +427,7 @@ class SOMPZInformer(CatInformer):
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for data"),
                           zero_points=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for data, if needed"),
-                          som_shape=Param(tuple, (32, 32), msg="shape for the som, must be a 2-element tuple"),
+                          som_shape=Param(list, [32, 32], msg="shape for the som, must be a 2-element tuple"),
                           som_minerror=Param(float, 0.01, msg="floor placed on observational error on each feature in som"),
                           som_wrap=Param(bool, False, msg="flag to set whether the SOM has periodic boundary conditions"),
                           som_take_log=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for som"),
@@ -494,7 +487,7 @@ class SOMPZInformer(CatInformer):
         pool = Pool(self.config.nproc)
         nproc = self.config.nproc
         pooltuple = (pool, nproc)
-        
+
         print(f"Training SOM of shape {self.config.som_shape}...", flush=True)
 
         som = somfuncs.NoiseSOM(sommetric, d_input, d_errs, learn_func,
@@ -532,8 +525,8 @@ class SOMPZEstimator(CatEstimator):
                           input_errs_wide=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for wide data"),
                           zero_points_deep=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for deep data, if needed"),
                           zero_points_wide=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for wide data, if needed"),
-                          som_shape_deep=Param(tuple, (32, 32), msg="shape for the deep som, must be a 2-element tuple"),
-                          som_shape_wide=Param(tuple, (32, 32), msg="shape for the wide som, must be a 2-element tuple"),
+                          som_shape_deep=Param(list, [32, 32], msg="shape for the deep som, must be a 2-element tuple"),
+                          som_shape_wide=Param(list, [32, 32], msg="shape for the wide som, must be a 2-element tuple"),
                           som_minerror_deep=Param(float, 0.01, msg="floor placed on observational error on each feature in deep som"),
                           som_minerror_wide=Param(float, 0.01, msg="floor placed on observational error on each feature in wide som"),
                           som_wrap_deep=Param(bool, False, msg="flag to set whether the deep SOM has periodic boundary conditions"),
@@ -1037,13 +1030,10 @@ class SOMPZPzc(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
-                          deep_som_size=Param(int, 4096, msg="number of deep som"),
-                          specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),]
     outputs = [('pz_c', Hdf5Handle)]
-
 
     def __init__(self, args, **kwargs):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
@@ -1057,11 +1047,12 @@ class SOMPZPzc(CatEstimator):
         else:  # pragma: no cover
             spec_data = self.get_data('spec_data')
         cell_deep_spec_data = self.get_data('cell_deep_spec_data')
-        key = self.config.specz_name
+        self.deep_som_size = int(cell_deep_spec_data['som_size'][0])
+        key = self.config.redshift_col
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data['cells']})
-        all_deep_cells = np.arange(self.config['deep_som_size'])
+        all_deep_cells = np.arange(self.deep_som_size)
         pz_c = np.array(get_deep_histograms(None,  # this arg is not currently used in get_deep_histograms
                                             spec_data_for_pz,
                                             key=key,
@@ -1089,9 +1080,6 @@ class SOMPZPzchat(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
-                          wide_som_size=Param(int, 1024, msg="number of deep som"),
-                          deep_som_size=Param(int, 4096, msg="number of deep som"),
-                          specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
@@ -1111,16 +1099,18 @@ class SOMPZPzchat(CatEstimator):
         spec_data = self.get_data('spec_data')
         cell_wide_wide_data = self.get_data('cell_wide_wide_data')
         cell_deep_spec_data = self.get_data('cell_deep_spec_data')
+        self.wide_som_size = int(cell_wide_wide_data['som_size'][0])
+        self.deep_som_size = int(cell_deep_spec_data['som_size'][0])
         pc_chat = self.get_data('pc_chat')['pc_chat'][:]
-        key = self.config.specz_name
+        key = self.config.redshift_col
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data['cells']})
 
         wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data['cells']})
 
-        all_wide_cells = np.arange(self.config['wide_som_size'])
-        all_deep_cells = np.arange(self.config['deep_som_size'])
+        all_wide_cells = np.arange(self.wide_som_size)
+        all_deep_cells = np.arange(self.deep_som_size)
 
         pz_chat = np.array(histogram(wide_data_for_pz,
                                      spec_data_for_pz,
@@ -1128,7 +1118,7 @@ class SOMPZPzchat(CatEstimator):
                                      pcchat=pc_chat,
                                      cells=all_wide_cells,
                                      cell_weights=np.ones(len(all_wide_cells)),
-                                     deep_som_size=self.config['deep_som_size'],
+                                     deep_som_size=self.deep_som_size,
                                      overlap_weighted_pzc=False,
                                      bins=zbins,
                                      individual_chat=True))
@@ -1151,10 +1141,6 @@ class SOMPZPc_chat(CatEstimator):
     name = "SOMPZPc_chat"
     config_options = CatEstimator.config_options.copy()
     config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
-                          redshift_col=SHARED_PARAMS,
-                          deep_som_size=Param(int, 4096, msg="number of deep som"),
-                          wide_som_size=Param(int, 1024, msg="number of wide som"),
-                          specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           )
     inputs = [('cell_deep_balrog_data', TableHandle),
               ('cell_wide_balrog_data', TableHandle),
@@ -1170,8 +1156,10 @@ class SOMPZPc_chat(CatEstimator):
     def run(self):
         cell_deep_balrog_data = self.get_data('cell_deep_balrog_data')
         cell_wide_balrog_data = self.get_data('cell_wide_balrog_data')
-        pc_chat = calculate_pcchat(self.config['deep_som_size'],
-                                   self.config['wide_som_size'],
+        self.deep_som_size = int(cell_deep_balrog_data['som_size'][0])
+        self.wide_som_size = int(cell_wide_balrog_data['som_size'][0])
+        pc_chat = calculate_pcchat(self.deep_som_size,
+                                   self.wide_som_size,
                                    cell_deep_balrog_data['cells'],  # balrog_data['cell_deep'],#.values,
                                    cell_wide_balrog_data['cells'],  # balrog_data['cell_wide'],#.values,
                                    np.ones(len(cell_wide_balrog_data['cells'])))
@@ -1196,9 +1184,6 @@ class SOMPZTomobin(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
-                          wide_som_size=Param(int, 1024, msg="number of deep som"),
-                          deep_som_size=Param(int, 4096, msg="number of deep som"),
-                          specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
@@ -1216,20 +1201,22 @@ class SOMPZTomobin(CatEstimator):
         spec_data = self.get_data('spec_data')
         cell_deep_spec_data = self.get_data('cell_deep_spec_data')
         cell_wide_spec_data = self.get_data('cell_wide_spec_data')
+        self.wide_som_size = int(cell_wide_spec_data['som_size'][0])
+        self.deep_som_size = int(cell_deep_spec_data['som_size'][0])
         # pc_chat = self.get_data('pc_chat')['pc_chat'][:]
-        key = self.config.specz_name
+        key = self.config.redshift_col
 
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data['cells'],
                                          'cell_wide': cell_wide_spec_data['cells']})
         tomo_bins_wide_dict = bin_assignment_spec(spec_data_for_pz,
-                                                  self.config['deep_som_size'],
-                                                  self.config['wide_som_size'],
+                                                  self.deep_som_size,
+                                                  self.wide_som_size,
                                                   bin_edges=self.config['bin_edges'],
                                                   key_z=key,
                                                   key_cells_wide='cell_wide')
         tomobinswide = tomo_bins_wide_2d(tomo_bins_wide_dict)
-        tomobinsmapping = -1 * np.ones((self.config['wide_som_size'], 2))
+        tomobinsmapping = -1 * np.ones((self.wide_som_size, 2))
         for key in tomobinswide:
             tomobinsmapping[tomobinswide[key][:, 0].astype(int), 0] = key
             tomobinsmapping[tomobinswide[key][:, 0].astype(int), 1] = tomobinswide[key][:, 1]
@@ -1255,9 +1242,6 @@ class SOMPZnz(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
-                          wide_som_size=Param(int, 1024, msg="number of deep som"),
-                          deep_som_size=Param(int, 4096, msg="number of deep som"),
-                          specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
@@ -1277,6 +1261,8 @@ class SOMPZnz(CatEstimator):
         spec_data = self.get_data('spec_data')
         cell_wide_wide_data = self.get_data('cell_wide_wide_data')
         cell_deep_spec_data = self.get_data('cell_deep_spec_data')
+        self.wide_som_size = int(cell_wide_wide_data['som_size'][0])
+        self.deep_som_size = int(cell_deep_spec_data['som_size'][0])
         tomo_bins_wide_in = self.get_data('tomo_bins_wide')['tomo_bins_wide'][:]
         tomo_bins_wide = {}
         for i in np.unique(tomo_bins_wide_in[:, 0]):
@@ -1286,21 +1272,21 @@ class SOMPZnz(CatEstimator):
             inarr2 = tomo_bins_wide_in[inarr1, 1]
             tomo_bins_wide[i] = np.array([inarr1, inarr2]).T
         pc_chat = self.get_data('pc_chat')['pc_chat'][:]
-        key = self.config.specz_name
+        key = self.config.redshift_col
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data['cells']})
 
         wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data['cells']})
 
-        all_wide_cells = np.arange(self.config['wide_som_size'])
-        all_deep_cells = np.arange(self.config['deep_som_size'])
+        all_wide_cells = np.arange(self.wide_som_size)
+        all_deep_cells = np.arange(self.deep_som_size)
         nz = redshift_distributions_wide(data=wide_data_for_pz,
                                          deep_data=spec_data_for_pz,
                                          overlap_weighted_pchat=False,
                                          overlap_weighted_pzc=False,
                                          bins=zbins,
-                                         deep_som_size=self.config['deep_som_size'],
+                                         deep_som_size=self.deep_som_size,
                                          pcchat=pc_chat,
                                          tomo_bins=tomo_bins_wide,
                                          key=key,
@@ -1328,12 +1314,10 @@ class SOMPZEstimatorBase(CatEstimator):
     config_options.update(chunk_size=SHARED_PARAMS,
                           redshift_col=SHARED_PARAMS,
                           hdf5_groupname=SHARED_PARAMS,
-                          # groupname=Param(str, "photometry", msg="hdf5_groupname for balrog_data"),
-                          specz_name=Param(str, "redshift", msg="column name for true redshift in specz sample"),
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for deep data"),
                           zero_points=Param(list, default_zero_points, msg="zero points for converting mags to fluxes for deep data, if needed"),
-                          som_shape=Param(tuple, (32, 32), msg="shape for the deep som, must be a 2-element tuple"),
+                          som_shape=Param(list, [32, 32], msg="shape for the deep som, must be a 2-element tuple"),
                           som_minerror=Param(float, 0.01, msg="floor placed on observational error on each feature in deep som"),
                           som_wrap=Param(bool, False, msg="flag to set whether the deep SOM has periodic boundary conditions"),
                           som_take_log=Param(bool, True, msg="flag to set whether to take log of inputs (i.e. for fluxes) for deep som"),
@@ -1356,6 +1340,8 @@ class SOMPZEstimatorBase(CatEstimator):
         # check on bands, errs, and prior band
         if len(self.config.inputs) != len(self.config.input_errs):  # pragma: no cover
             raise ValueError("Number of inputs_deep specified in inputs_deep must be equal to number of mag errors specified in input_errs_deep!")
+        if len(self.config.som_shape) != 2:
+            raise ValueError(f"som_shape must be a list with two integers specifying the SOM shape, not len {len(self.config.som_shape)}")
 
     def open_model(self, **kwargs):
         """Load the model and/or attach it to this Creator.
@@ -1388,7 +1374,10 @@ class SOMPZEstimatorBase(CatEstimator):
         return self.model
 
     def _assign_som(self, flux, flux_err):
-        som_dim = self.config.som_shape[0]
+        # som_dim = self.config.som_shape[0]
+        s0 = int(self.config.som_shape[0])
+        s1 = int(self.config.som_shape[1])
+        self.som_size = np.array([int(s0 * s1)])
         # output_path = './'  # TODO make kwarg
         nTrain = flux.shape[0]
         # som_weights = np.load(infile_som, allow_pickle=True)
@@ -1397,7 +1386,7 @@ class SOMPZEstimatorBase(CatEstimator):
         metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         som = somfuncs.NoiseSOM(metric, None, None,
                                 learning=hh,
-                                shape=(som_dim, som_dim),
+                                shape=(s0, s1),
                                 wrap=False, logF=True,
                                 initialize=som_weights,
                                 minError=0.02)
@@ -1463,8 +1452,12 @@ class SOMPZEstimatorBase(CatEstimator):
         self.model = None
         self.model = self.open_model(**self.config)  # None
         first = True
+        if self.config.hdf5_groupname:
+            iter1 = self.input_iterator('data')[self.config.hdf5_groupname]
+        else:
+            iter1 = self.input_iterator('data')
         # iter1 = self.input_iterator('data', groupname=self.config.hdf5_groupname)
-        iter1 = self.input_iterator('data')
+        # iter1 = self.input_iterator('data')
         self._output_handle = None
         for s, e, test_data in iter1:
             print(f"Process {self.rank} running creator on chunk {s} - {e}", flush=True)
@@ -1488,10 +1481,8 @@ class SOMPZEstimatorBase(CatEstimator):
         -------
 
         """
-        #somsize = np.array(int(self.config.som_shape[0]*self.config.som_shape[1]))
-        #sizedict = dict(som_size=somsize)
-        #self._output_handle.set_data("som_size", sizedict)
-        self._output_handle.finalize_write()
+        tmpdict = dict(som_size=self.som_size)
+        self._output_handle.finalize_write(**tmpdict)
 
 
 class SOMPZEstimatorWide(SOMPZEstimatorBase):
