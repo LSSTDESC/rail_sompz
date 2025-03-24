@@ -1,0 +1,71 @@
+som_deep_informer_big:
+  output_mode: default
+  redshift_col: Z
+  hdf5_groupname: ''
+  nproc: 1
+  inputs:
+  - MAG_U
+  - MAG_G
+  - MAG_R
+  - MAG_I
+  - MAG_Z
+  input_errs:
+  - MAGERR_U
+  - MAGERR_G
+  - MAGERR_R
+  - MAGERR_I
+  - MAGERR_Z
+  zero_points:
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  som_shape: [32, 32]
+  som_minerror: 0.01
+  som_wrap: false
+  som_take_log: true
+  convert_to_flux: true
+  set_threshold: true
+  thresh_val: 1.0e-05
+  thresh_val_err: 1.0e-05
+  name: som_deep_informer_big
+  model: DEMO_CARDINAL_model_deep_BIG.pkl
+  som_takelog: false
+  config: null
+som_wide_informer_big:
+  output_mode: default
+  redshift_col: Z
+  hdf5_groupname: ''
+  nproc: 1
+  inputs:
+  - MAG_U
+  - MAG_G
+  - MAG_R
+  - MAG_I
+  - MAG_Z
+  input_errs:
+  - MAGERR_U
+  - MAGERR_G
+  - MAGERR_R
+  - MAGERR_I
+  - MAGERR_Z
+  zero_points:
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  som_shape: [25, 25]
+  som_minerror: 0.005
+  som_wrap: false
+  som_take_log: true
+  convert_to_flux: true
+  set_threshold: true
+  thresh_val: 1.0e-05
+  thresh_val_err: 1.0e-05
+  name: som_wide_informer_big
+  model: DEMO_CARDINAL_model_wide_BIG.pkl
+  som_takelog: false
+  config: null
