@@ -1,10 +1,10 @@
 #!/bin/bash
-#SBATCH --qos=debug # regular
-#SBATCH --time=00:29:00
+#SBATCH --qos=regular # debug # regular
+#SBATCH --time=03:00:00
 #SBATCH --nodes=1
 #SBATCH -C cpu
-#SBATCH --error="testscript_estimate_big.err"
-#SBATCH --output="testscript_estimate_big.out"
+#SBATCH --error="estimate.err"
+#SBATCH --output="estimate.out"
 
 module load python
 module swap PrgEnv-${PE_ENV,,} PrgEnv-gnu

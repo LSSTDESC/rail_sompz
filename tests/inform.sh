@@ -3,8 +3,8 @@
 #SBATCH --time=05:00:00
 #SBATCH --nodes=1
 #SBATCH -C cpu
-#SBATCH --error="testscript_inform_big.err"
-#SBATCH --output="testscript_inform_big.out"
+#SBATCH --error="inform.err"
+#SBATCH --output="inform.out"
 
 module load python
 module swap PrgEnv-${PE_ENV,,} PrgEnv-gnu

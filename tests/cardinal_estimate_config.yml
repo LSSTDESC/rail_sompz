@@ -136,7 +136,7 @@ som_widewide_estimator:
   name: som_widewide_estimator
   model: DEMO_CARDINAL_model_wide_BIG.pkl
   assignment: TESTDEMO_widedata_wide_assign.hdf5
-  data: ./DEMODATA/wide_data_subsample_tiny.hdf5
+  data: ./DEMODATA/wide_data_2025-03-24.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_widespec_estimator:

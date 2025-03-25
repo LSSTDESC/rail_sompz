@@ -1,6 +1,6 @@
 output_dir: .
 log_dir: .
-resume: false
+resume: true
 config: cardinal_estimate_config.yml
 modules: rail
 inputs:
