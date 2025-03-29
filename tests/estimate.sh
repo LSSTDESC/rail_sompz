@@ -1,10 +1,12 @@
 #!/bin/bash
 #SBATCH --qos=regular # debug # regular
-#SBATCH --time=03:00:00
+#SBATCH --time=12:00:00
 #SBATCH --nodes=1
 #SBATCH -C cpu
 #SBATCH --error="estimate.err"
 #SBATCH --output="estimate.out"
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=jmyles@astro.princeton.edu
 
 module load python
 module swap PrgEnv-${PE_ENV,,} PrgEnv-gnu

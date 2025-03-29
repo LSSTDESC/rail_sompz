@@ -14,21 +14,30 @@ som_deepdeep_estimator:
   - MAG_R
   - MAG_I
   - MAG_Z
+  - MAG_VISTA_Filters_at80K_forETC_J
+  - MAG_VISTA_Filters_at80K_forETC_H
+  - MAG_VISTA_Filters_at80K_forETC_Ks  
   input_errs: &id003
   - MAGERR_U
   - MAGERR_G
   - MAGERR_R
   - MAGERR_I
   - MAGERR_Z
+  - MAGERR_VISTA_Filters_at80K_forETC_J
+  - MAGERR_VISTA_Filters_at80K_forETC_H
+  - MAGERR_VISTA_Filters_at80K_forETC_Ks    
   zero_points: &id004
   - 30.0
   - 30.0
   - 30.0
   - 30.0
   - 30.0
+  - 30.0
+  - 30.0
+  - 30.0  
   som_shape: &id005
-  - 32
-  - 32
+  - 64
+  - 64
   som_minerror: 0.01
   som_wrap: false
   som_take_log: false
@@ -37,9 +46,9 @@ som_deepdeep_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_deepdeep_estimator
-  model: DEMO_CARDINAL_model_deep_BIG.pkl
-  assignment: TESTDEMO_deepdata_deep_assign.hdf5
-  data: ./DEMODATA/balrog_data_2025-03-24.hdf5
+  model: out/CARDINAL_model_deep.pkl
+  assignment: deepdata_deep_assignment.hdf5
+  data: ./cardinal/balrog_data.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_deepwide_estimator:
@@ -71,8 +80,8 @@ som_deepwide_estimator:
   - 30.0
   - 30.0
   som_shape: &id009
-  - 25
-  - 25
+  - 32
+  - 32
   som_minerror: 0.005
   som_wrap: false
   som_take_log: false
@@ -81,9 +90,9 @@ som_deepwide_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_deepwide_estimator
-  model: DEMO_CARDINAL_model_wide_BIG.pkl
-  assignment: TESTDEMO_deepdata_wide_assign.hdf5
-  data: ./DEMODATA/balrog_data_2025-03-24.hdf5
+  model: out/CARDINAL_model_wide.pkl
+  assignment: deepdata_wide_assignment.hdf5
+  data: ./cardinal/balrog_data.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_deepspec_estimator:
@@ -108,8 +117,8 @@ som_deepspec_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_deepspec_estimator
-  model: DEMO_CARDINAL_model_deep_BIG.pkl
-  data: ./DEMODATA/spec_data_2025-03-24.hdf5
+  model: out/CARDINAL_model_deep.pkl
+  data: ./cardinal/spec_data.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_widewide_estimator:
@@ -134,9 +143,9 @@ som_widewide_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_widewide_estimator
-  model: DEMO_CARDINAL_model_wide_BIG.pkl
-  assignment: TESTDEMO_widedata_wide_assign.hdf5
-  data: ./DEMODATA/wide_data_2025-03-24.hdf5
+  model: out/CARDINAL_model_wide.pkl
+  assignment: widedata_wide_assignment.hdf5
+  data: ./cardinal/wide_data.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_widespec_estimator:
@@ -161,8 +170,8 @@ som_widespec_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_widespec_estimator
-  model: DEMO_CARDINAL_model_wide_BIG.pkl
-  assignment: TESTDEMO_specdata_wide_assign.hdf5
+  model: out/CARDINAL_model_wide.pkl
+  assignment: specdata_wide_assignment.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_pzc_stage:
@@ -184,15 +193,15 @@ som_pzc_stage:
   deep_groupname: ''
   bin_edges:
   - 0.0
-  - 0.5
-  - 1.0
+  - 0.35
+  - 0.65
+  - 0.85
   - 2.0
-  - 3.0
   zbins_min: 0.0
   zbins_max: 3.2
   zbins_dz: 0.02
   name: som_pzc_stage
-  pz_c: TESTDEMO_pz_c.hdf5
+  pz_c: out/pz_c.hdf5
   config: null
 pcchat_stage:
   output_mode: default
@@ -205,8 +214,8 @@ pcchat_stage:
   recompute_point_estimates: false
   inputs: *id010
   name: pcchat_stage
-  deep_som_size: 1024
-  wide_som_size: 625
+  deep_som_size: 4096
+  wide_som_size: 1024
   redshift_col: Z
   config: null
 sompz_pzchat:
@@ -221,11 +230,11 @@ sompz_pzchat:
   inputs: *id010
   redshift_col: Z
   bin_edges:
-  - 0.2
-  - 0.6
-  - 1.2
-  - 1.8
-  - 2.5
+  - 0.0
+  - 0.35
+  - 0.65
+  - 0.85
+  - 2.0
   zbins_min: 0.0
   zbins_max: 3.0
   zbins_dz: 0.025
@@ -243,18 +252,18 @@ sompz_tomobin:
   inputs: *id010
   redshift_col: Z
   bin_edges:
-  - 0.2
-  - 0.6
-  - 1.2
-  - 1.8
-  - 2.5
+  - 0.0
+  - 0.35
+  - 0.65
+  - 0.85
+  - 2.0
   zbins_min: 0.0
   zbins_max: 3.0
   zbins_dz: 0.025
   name: sompz_tomobin
-  wide_som_size: 625
-  deep_som_size: 1024
-  tomo_bins_wide: TESTDEMO_tomo_bins_wide.hdf5
+  wide_som_size: 1024
+  deep_som_size: 4096
+  tomo_bins_wide: tomo_bins_wide.hdf5
   config: null
 sompz_nz:
   output_mode: default
@@ -268,16 +277,16 @@ sompz_nz:
   inputs: *id010
   redshift_col: Z
   bin_edges:
-  - 0.2
-  - 0.6
-  - 1.2
-  - 1.8
-  - 2.5
+  - 0.0
+  - 0.35
+  - 0.65
+  - 0.85
+  - 2.0
   zbins_min: 0.0
   zbins_max: 3.0
   zbins_dz: 0.025
   name: sompz_nz
   wide_som_size: 625
   deep_som_size: 1024
-  nz: TESTDEMO_FINAL_NZ.hdf5
+  nz: FINAL_NZ.hdf5
   config: null

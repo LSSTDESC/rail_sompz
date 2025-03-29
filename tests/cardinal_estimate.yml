@@ -1,14 +1,14 @@
-output_dir: .
-log_dir: .
+output_dir: out
+log_dir: out
 resume: true
 config: cardinal_estimate_config.yml
 modules: rail
 inputs:
-  deep_model: DEMO_CARDINAL_model_deep_BIG.pkl
-  wide_model: DEMO_CARDINAL_model_wide_BIG.pkl
-  input_deep_data: ./DEMODATA/balrog_data_2025-03-24.hdf5
-  input_spec_data: ./DEMODATA/spec_data_2025-03-24.hdf5
-  input_wide_data: ./DEMODATA/wide_data_2025-03-24.hdf5
+  deep_model: out/CARDINAL_model_deep.pkl
+  wide_model: out/CARDINAL_model_wide.pkl
+  input_deep_data: ./cardinal/balrog_data.hdf5
+  input_spec_data: ./cardinal/spec_data.hdf5
+  input_wide_data: ./cardinal/wide_data.hdf5
 stages:
 - name: som_deepdeep_estimator
   classname: SOMPZEstimatorDeep
