@@ -1,11 +1,7 @@
 import numpy as np
-# FIXME, this is broken
-# import numba
 import pandas as pd
 import h5py
 
-# FIXME, this is broken
-# from .som import SelfOrganizingMap, unravel_index
 
 class CellMap(object):
     """This class will link to two Self-Organizing Maps.
