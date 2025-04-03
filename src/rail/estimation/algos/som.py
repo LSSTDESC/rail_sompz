@@ -64,29 +64,49 @@ class NoiseSOM:
                  initialize='uniform',
                  gridOverDimensions=None,
                  pool=None):
-        """
-        metric: a class to define the distance metric and shifting rules.
-        data, errors: arrays of shape (M,N) giving the values and errors, respectively,
-                      for each of the N features of M training points.  If
-                      data=None, and an array is passed as initialize argument,
-                      then this will be adopted as the weights with no training.
-        learning: a function giving strength of cell shifts as function of training
-                 iteration number and the distance (in SOM space) between a cell
-                 and the BMU.  Takes arguments ( xy, shape, wrap, index of bmu, iteration)
-                 and returns an array of given shape holding values for each cell.
-        shape: shape of the SOM cell array (any number of dimensions allowed)
-        minError: floor placed on observational error on each feature (or fractional
-                 error if logF=True).
-        wrap:  does the SOM have periodic boundary conditions?
-        logF:  should features be treated logarithmically for initial setup?
-        initialize:  how to set up initial values of weights, choices:
+        """ Build a new SOM
+
+        Parameters
+        ----------
+        metric
+            a class to define the distance metric and shifting rules.
+
+        data, errors
+            arrays of shape (M,N) giving the values and errors, respectively,
+            for each of the N features of M training points.  If
+            data=None, and an array is passed as initialize argument,
+            then this will be adopted as the weights with no training.
+
+        learning
+            a function giving strength of cell shifts as function of training
+            iteration number and the distance (in SOM space) between a cell
+            and the BMU.  Takes arguments ( xy, shape, wrap, index of bmu, iteration)
+            and returns an array of given shape holding values for each cell.
+
+        shape
+            shape of the SOM cell array (any number of dimensions allowed)
+
+        minError
+            floor placed on observational error on each feature (or fractional
+            error if logF=True).
+
+        wrap
+            does the SOM have periodic boundary conditions?
+
+        logF
+            should features be treated logarithmically for initial setup?
+
+        initialize
+            how to set up initial values of weights, choices:
             'uniform': randomly spaced uniformly within (log) bounds of data
             'sample':  start from a sample of the data
             <array>:   use specified array of dimens shape+(N,)
-        gridOverDimensions: if you give a tuple of length equal to the number of
-                 dimensions of the SOM, then the weights will be initialized to be
-                 in a (log) grid over these dimensions of feature space
-                 (and retain other initialization method in other dimensions).
+
+        gridOverDimensions
+            if you give a tuple of length equal to the number of
+            dimensions of the SOM, then the weights will be initialized to be
+            in a (log) grid over these dimensions of feature space
+            (and retain other initialization method in other dimensions).
         """
 
         # save parameters
@@ -356,11 +376,20 @@ class AsinhMetric:
 
     def __init__(self, lnScaleSigma=0.4, lnScaleStep=0.02, maxSigma=3.):
         """Create a distance metric between scale-smeared cells and some features
-        lnScaleSigma: sigma of a Gaussian in ln(s), where s is an overall scale factor
+
+        Parameters
+        ----------
+
+        lnScaleSigma
+            sigma of a Gaussian in ln(s), where s is an overall scale factor
             applied to the feature vector of a SOM cell, that will be marginalized
             over.  Enter <=0 to just use unit scale factor.
-        maxSigma:  largest number of sigma to extend scale factor.
-        lnScaleStep: step size in ln(scale) used when integrating over scale
+
+        maxSigma
+            largest number of sigma to extend scale factor.
+
+        lnScaleStep
+            step size in ln(scale) used when integrating over scale
         """
         if lnScaleSigma > 0.:
             # Create an array of scale factors (s) and distance-sq (sPenalty) to the
@@ -478,10 +507,16 @@ class LinearMetric:
 
     def __init__(self, noise0=0, signalScale=None):
         """Create a distance metric between scale-smeared cells and some features
-        noise0: when a move is requested, each dimension's move will be suppressed
+
+        Parameters
+        ----------
+        noise0
+            when a move is requested, each dimension's move will be suppressed
             by a factor noise^2/(noise0^2+noise^2) as a means of deweighting bad
             measurements.
-        signalScale: if given, it should be an array over features giving range of
+
+        signalScale
+            if given, it should be an array over features giving range of
             signals, and the move suppression for noise0 above will be
             calculated using noise/signalScale in each feature dimension.
         """
