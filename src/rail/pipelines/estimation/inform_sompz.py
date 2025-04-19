@@ -67,11 +67,13 @@ class InformSomPZPipeline(RailPipeline):
 
         active_catalog = CatalogConfigBase.active_class()
 
+        # 1: train the deep SOM
         self.som_informer_deep = SOMPZInformer.build(
             aliases=dict(input_data='input_deep_data'),
             **som_params_deep,
         )
 
+        # 2: train the wide SOM
         self.som_informer_wide = SOMPZInformer.build(
             aliases=dict(input_data='input_wide_data'),
             **som_params_wide,
