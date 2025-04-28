@@ -1,15 +1,3 @@
-
-import os
-import sys
-import numpy as np
-from rail.core.utils import RAILDIR
-from rail.core import common_params
-import tables_io
-import matplotlib.pyplot as plt
-
-import pandas as pd
-import astropy.io.fits as fits
-
 from rail.utils.catalog_utils import CatalogConfigBase
 from rail.core.stage import RailStage, RailPipeline
 
@@ -30,7 +18,7 @@ for band in bands:
     zeropts.append(30.)
 
 widebands = []
-wideerrs = []  
+wideerrs = []
 for band in bands[:6]:
     widebands.append(f'{band}')
     wideerrs.append(f'{band}_err')
@@ -38,7 +26,7 @@ for band in bands[:6]:
 
 
 deep_som_params = dict(
-    inputs=deepbands, 
+    inputs=deepbands,
     input_errs=deeperrs,
     hdf5_groupname="",
     zero_points=zeropts,
@@ -53,7 +41,7 @@ deep_som_params = dict(
 
 
 wide_som_params = dict(
-    inputs=widebands, 
+    inputs=widebands,
     input_errs=wideerrs,
     hdf5_groupname="",
     zero_points=widezeropts,
@@ -76,7 +64,7 @@ zbins_min_tomo=0.0
 zbins_max_tomo=3.0
 zbins_dz_tomo=0.025
 
-            
+
 class EstimateSomPZPipeline(RailPipeline):
 
     default_input_dict={
@@ -100,21 +88,21 @@ class EstimateSomPZPipeline(RailPipeline):
             aliases=dict(data="input_deep_data"),
             **deep_som_params,
         )
-        
+
         # 2. Find the best cell mapping for all of the deep/balrog galaxies into the wide SOM
         self.som_deepwide_estimator = SOMPZEstimatorWide.build(
             aliases=dict(data="input_deep_data"),
             **wide_som_params,
-        )            
+        )
 
         # 3. Find the best cell mapping for all of the spectrscopic galaxies into the deep SOM
         self.som_deepspec_estimator = SOMPZEstimatorDeep.build(
             aliases=dict(data="input_spec_data"),
             **deep_som_params
         )
-        
+
         # 4. Use these cell assignments to compute the pz_c redshift histograms in deep SOM.
-        # These distributions are redshift pdfs for individual deep SOM cells. 
+        # These distributions are redshift pdfs for individual deep SOM cells.
         self.som_pzc = SOMPZPzc.build(
             redshift_col="redshift",
             bin_edges=bin_edges_deep,
@@ -125,7 +113,7 @@ class EstimateSomPZPipeline(RailPipeline):
             aliases=dict(spec_data="input_spec_data"),
             connections=dict(cell_deep_spec_data=self.som_deepspec_estimator.io.assignment),
         )
-        
+
         # 5. Compute the 'transfer function'.
         # The 'transfer function' weights relating deep to wide photometry.
         # These weights set the relative importance of p(z) from deep SOM cells for each
@@ -137,7 +125,7 @@ class EstimateSomPZPipeline(RailPipeline):
                 cell_wide_balrog_data=self.som_deepwide_estimator.io.assignment,
             )
         )
-        
+
         # 6. Find the best cell mapping for all of the wide-field galaxies into the wide SOM
         self.som_widewide_estimator = SOMPZEstimatorWide.build(
             aliases=dict(data="input_wide_data"),

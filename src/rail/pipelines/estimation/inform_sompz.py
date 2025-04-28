@@ -1,9 +1,3 @@
-#!/usr/bin/env python
-# coding: utf-8
-
-import ceci
-
-# Various rail modules
 from rail.core.stage import RailStage, RailPipeline
 from rail.utils.catalog_utils import CatalogConfigBase
 
@@ -21,11 +15,11 @@ for band in bands:
     zeropts.append(30.)
 
 widebands = []
-wideerrs = []  
+wideerrs = []
 for band in bands[:6]:
     widebands.append(f'{band}')
     wideerrs.append(f'{band}_err')
-    
+
 refband_deep=deepbands[3]
 refband_wide=widebands[3]
 
@@ -33,9 +27,9 @@ refband_wide=widebands[3]
 som_params_deep = dict(
     inputs=deepbands,
     input_errs=deeperrs,
-    zero_points=zeropts, 
+    zero_points=zeropts,
     convert_to_flux=True,
-    set_threshold=True, 
+    set_threshold=True,
     thresh_val=1.e-5,
     som_shape=[32,32],
     som_minerror=0.005,
@@ -46,7 +40,7 @@ som_params_deep = dict(
 som_params_wide = dict(
     inputs=widebands,
     input_errs=wideerrs,
-    convert_to_flux=True, 
+    convert_to_flux=True,
     som_shape=[25, 25],
     som_minerror=0.005,
     som_take_log=False,
@@ -80,6 +74,3 @@ class InformSomPZPipeline(RailPipeline):
             aliases=dict(input_data='input_wide_data'),
             **som_params_wide,
         )
-
-
-        

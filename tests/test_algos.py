@@ -60,7 +60,7 @@ def test_sompz_train(ntarray):
         (parquetdata, ""),
         (validdata, "photometry")
     ]
-)    
+)
 def test_sompz(inputdata, groupname):
     """
     train_config_dict = {}
