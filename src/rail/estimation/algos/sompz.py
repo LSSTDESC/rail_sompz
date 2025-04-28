@@ -1508,7 +1508,7 @@ class SOMPZEstimatorWide(SOMPZEstimatorBase):
         self.model : object
             The object encapsulating the trained model
         """
-        model = kwargs.get("model", None)
+        model = kwargs.get("model", kwargs.get('wide_model', None))
         if model is None or model == "None":  # pragma: no cover
             self.model = None
         else:
@@ -1546,7 +1546,7 @@ class SOMPZEstimatorDeep(SOMPZEstimatorBase):
         self.model : object
             The object encapsulating the trained model
         """
-        model = kwargs.get("model", None)
+        model = kwargs.get("model", kwargs.get('deep_model', None))
         if model is None or model == "None":  # pragma: no cover
             self.model = None
         else:

@@ -85,19 +85,28 @@ class EstimateSomPZPipeline(RailPipeline):
 
         # 1. Find the best cell mapping for all of the deep/balrog galaxies into the deep SOM
         self.som_deepdeep_estimator = SOMPZEstimatorDeep.build(
-            aliases=dict(data="input_deep_data"),
+            aliases=dict(
+                model='deep_model',
+                data="input_deep_data"
+            ),
             **deep_som_params,
         )
 
         # 2. Find the best cell mapping for all of the deep/balrog galaxies into the wide SOM
         self.som_deepwide_estimator = SOMPZEstimatorWide.build(
-            aliases=dict(data="input_deep_data"),
+            aliases=dict(
+                model='wide_model',
+                data="input_deep_data"
+            ),
             **wide_som_params,
         )
 
         # 3. Find the best cell mapping for all of the spectrscopic galaxies into the deep SOM
         self.som_deepspec_estimator = SOMPZEstimatorDeep.build(
-            aliases=dict(data="input_spec_data"),
+            aliases=dict(
+                model='deep_model',
+                data="input_spec_data"
+            ),
             **deep_som_params
         )
 
@@ -128,7 +137,10 @@ class EstimateSomPZPipeline(RailPipeline):
 
         # 6. Find the best cell mapping for all of the wide-field galaxies into the wide SOM
         self.som_widewide_estimator = SOMPZEstimatorWide.build(
-            aliases=dict(data="input_wide_data"),
+            aliases=dict(
+                model='wide_model',
+                data="input_wide_data"
+            ),
             **wide_som_params,
         )
 
@@ -140,6 +152,7 @@ class EstimateSomPZPipeline(RailPipeline):
             zbins_min=zbins_min_tomo,
             zbins_max=zbins_max_tomo,
             zbins_dz=zbins_dz_tomo,
+            redshift_col="redshift",
             aliases=dict(
                 spec_data='input_spec_data',
             ),
@@ -153,7 +166,10 @@ class EstimateSomPZPipeline(RailPipeline):
 
         # 8. Find the best cell mapping for all of the spectroscopic galaxies into the wide SOM
         self.som_widespec_estimator = SOMPZEstimatorWide.build(
-            aliases=dict(data="input_spec_data"),
+            aliases=dict(
+                model='wide_model',
+                data="input_spec_data"
+            ),
             **wide_som_params,
         )
 
@@ -165,6 +181,7 @@ class EstimateSomPZPipeline(RailPipeline):
             zbins_dz=zbins_dz_tomo,
             wide_som_size=625,
             deep_som_size=1024,
+            redshift_col="redshift",
             aliases=dict(
                 spec_data='input_spec_data',
             ),
