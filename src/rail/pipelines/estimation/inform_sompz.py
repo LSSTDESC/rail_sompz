@@ -7,6 +7,8 @@ import ceci
 from rail.core.stage import RailStage, RailPipeline
 from rail.utils.catalog_utils import CatalogConfigBase
 
+from rail.estimation.algos.sompz import SOMPZInformer
+
 
 bands = ['u','g','r','i','z','y','J','H','F']
 

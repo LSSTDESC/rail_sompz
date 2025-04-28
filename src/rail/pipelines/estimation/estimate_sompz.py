@@ -10,6 +10,9 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import astropy.io.fits as fits
 
+from rail.utils.catalog_utils import CatalogConfigBase
+from rail.core.stage import RailStage, RailPipeline
+
 from rail.estimation.algos.sompz import SOMPZEstimatorWide, SOMPZEstimatorDeep
 from rail.estimation.algos.sompz import SOMPZPzc, SOMPZPzchat, SOMPZPc_chat
 from rail.estimation.algos.sompz import SOMPZTomobin, SOMPZnz
@@ -81,7 +84,7 @@ class EstimateSomPZPipeline(RailPipeline):
         'deep_model': 'dummy.in',
         'input_spec_data':'dummy.in',
         'input_deep_data':'dummy.in',
-        'wide_data':'dummy.in',
+        'input_wide_data':'dummy.in',
     }
 
     def __init__(self):
@@ -131,7 +134,7 @@ class EstimateSomPZPipeline(RailPipeline):
         self.som_pcchat = SOMPZPc_chat.build(
             connections=dict(
                 cell_deep_balrog_data=self.som_deepdeep_estimator.io.assignment,
-                cell_wide_balrog_data=self.som.som_deepwide_estimator.io.assignment,
+                cell_wide_balrog_data=self.som_deepwide_estimator.io.assignment,
             )
         )
         
@@ -151,7 +154,7 @@ class EstimateSomPZPipeline(RailPipeline):
             zbins_dz=zbins_dz_tomo,
             aliases=dict(
                 spec_data='input_spec_data',
-            )
+            ),
             connections=dict(
                 cell_deep_spec_data=self.som_deepspec_estimator.io.assignment,
                 cell_wide_wide_data=self.som_widewide_estimator.io.assignment,
@@ -196,7 +199,7 @@ class EstimateSomPZPipeline(RailPipeline):
             connections=dict(
                 cell_deep_spec_data=self.som_deepspec_estimator.io.assignment,
                 cell_wide_wide_data=self.som_widewide_estimator.io.assignment,
-                tomo_bins_wide=self.som_tomobin.io.tomo_bin,
+                tomo_bins_wide=self.som_tomobin.io.tomo_bins_wide,
                 pc_chat=self.som_pcchat.io.pc_chat,
             ),
         )
