@@ -1,6 +1,6 @@
-from rail.utils.testing_utils import build_and_read_pipeline
-
 import pytest
+
+from rail.utils.testing_utils import build_and_read_pipeline
 
 
 @pytest.mark.parametrize(
