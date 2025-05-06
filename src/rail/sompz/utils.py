@@ -1,6 +1,8 @@
 """ Utility functions """
 
 import os
+from rail.utils.catalog_utils import CatalogConfigBase
+
 from rail import sompz
 
 import numpy as np
@@ -66,3 +68,31 @@ def selection_wl_cardinal(mag_i, mag_r, mag_r_limit, size,
     select = select_mag_i & select_mag_r & select_psf_r
 
     return select
+
+
+class SompzWideTestCatalogConfig(CatalogConfigBase):
+    """Configuration for SOMPZ test data wide field"""
+
+    tag = "som_pz_wide"
+    bandlist = ['u', 'g', 'r', 'i', 'z', 'y']
+    maglims = [26.4, 27.8, 27.1, 26.7, 25.8, 24.6]
+    a_env = [4.81, 3.64, 2.70, 2.06, 1.58, 1.31]
+    band_template = "{band}"
+    band_err_template = "{band}_err"
+    filter_file_template = "DC2LSST_{band}"
+    ref_band = "i"
+    redshift_col = "redshift"
+
+    
+class SompzDeepTestCatalogConfig(CatalogConfigBase):
+    """Configuration for SOMPZ test data deep field"""
+
+    tag = "som_pz_deep"
+    bandlist = ['u', 'g', 'r', 'i', 'z', 'y', 'J', 'H', 'F']
+    maglims = [26.4, 27.8, 27.1, 26.7, 25.8, 24.6, 27.8, 28.1, 27.5]
+    a_env = [4.81, 3.64, 2.70, 2.06, 1.58, 1.31, 0.68, 0.60, 0.47]
+    band_template = "{band}"
+    band_err_template = "{band}_err"
+    filter_file_template = "DC2LSST_{band}"
+    ref_band = "i"
+    redshift_col = "redshift"

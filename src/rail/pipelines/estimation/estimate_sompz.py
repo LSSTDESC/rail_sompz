@@ -5,54 +5,6 @@ from rail.estimation.algos.sompz import SOMPZEstimatorWide, SOMPZEstimatorDeep
 from rail.estimation.algos.sompz import SOMPZPzc, SOMPZPzchat, SOMPZPc_chat
 from rail.estimation.algos.sompz import SOMPZTomobin, SOMPZnz
 
-bands = ['u','g','r','i','z','y','J','H', 'F']
-#bands = ['u','g','r','i','z','y']
-
-deepbands = []
-deeperrs = []
-zeropts = []
-widezeropts = []
-for band in bands:
-    deepbands.append(f'{band}')
-    deeperrs.append(f'{band}_err')
-    zeropts.append(30.)
-
-widebands = []
-wideerrs = []
-for band in bands[:6]:
-    widebands.append(f'{band}')
-    wideerrs.append(f'{band}_err')
-    widezeropts.append(30.)
-
-
-deep_som_params = dict(
-    inputs=deepbands,
-    input_errs=deeperrs,
-    hdf5_groupname="",
-    zero_points=zeropts,
-    som_shape=[32,32], # now a list instead of a tuple!
-    som_minerror=0.01,
-    som_take_log=False,
-    convert_to_flux=True,
-    set_threshold=True,
-    thresh_val=1.e-5,
-    thresh_val_err=1.e-5,
-)
-
-
-wide_som_params = dict(
-    inputs=widebands,
-    input_errs=wideerrs,
-    hdf5_groupname="",
-    zero_points=widezeropts,
-    som_shape=[25,25], # now a list instead of a tuple!
-    som_minerror=0.005,
-    som_take_log=False,
-    convert_to_flux=True,
-    set_threshold=True,
-    thresh_val=1.e-5,
-    thresh_val_err=1.e-5,
-)
 
 bin_edges_deep=[0.0,0.5,1.0,2.0,3.0]
 zbins_min_deep=0.0
@@ -75,13 +27,43 @@ class EstimateSomPZPipeline(RailPipeline):
         'input_wide_data':'dummy.in',
     }
 
-    def __init__(self):
+    def __init__(self, wide_catalog_tag: str="SompzWideTestCatalogConfig", deep_catalog_tag: str="SompzDeepTestCatalogConfig", catalog_module: str="rail.sompz.utils"):
         RailPipeline.__init__(self)
 
         DS = RailStage.data_store
         DS.__class__.allow_overwrite = True
 
-        active_catalog = CatalogConfigBase.active_class()
+        wide_catalog_class = CatalogConfigBase.get_class(wide_catalog_tag, catalog_module)
+        deep_catalog_class = CatalogConfigBase.get_class(deep_catalog_tag, catalog_module)
+
+        wide_config_dict = wide_catalog_class.build_base_dict()
+        deep_config_dict = deep_catalog_class.build_base_dict()
+
+        som_params_deep = dict(
+            inputs=deep_config_dict['bands'],
+            input_errs=deep_config_dict['err_bands'],
+            zero_points=[30.]*len(deep_config_dict['bands']),
+            convert_to_flux=True,
+            set_threshold=True,
+            thresh_val=1.e-5,
+            thresh_val_err=1.e-5,
+            som_shape=[32,32],
+            som_minerror=0.005,
+            som_take_log=False,
+            som_wrap=False,
+        )
+
+        som_params_wide = dict(
+            inputs=wide_config_dict['bands'],
+            input_errs=wide_config_dict['err_bands'],
+            zero_points=[30.]*len(wide_config_dict['bands']),
+            convert_to_flux=True,
+            som_shape=[25, 25],
+            som_minerror=0.005,
+            som_take_log=False,
+            som_wrap=False,
+        )
+
 
         # 1. Find the best cell mapping for all of the deep/balrog galaxies into the deep SOM
         self.som_deepdeep_estimator = SOMPZEstimatorDeep.build(
@@ -89,7 +71,7 @@ class EstimateSomPZPipeline(RailPipeline):
                 model='deep_model',
                 data="input_deep_data"
             ),
-            **deep_som_params,
+            **som_params_deep,
         )
 
         # 2. Find the best cell mapping for all of the deep/balrog galaxies into the wide SOM
@@ -98,7 +80,7 @@ class EstimateSomPZPipeline(RailPipeline):
                 model='wide_model',
                 data="input_deep_data"
             ),
-            **wide_som_params,
+            **som_params_wide,
         )
 
         # 3. Find the best cell mapping for all of the spectrscopic galaxies into the deep SOM
@@ -107,7 +89,7 @@ class EstimateSomPZPipeline(RailPipeline):
                 model='deep_model',
                 data="input_spec_data"
             ),
-            **deep_som_params
+            **som_params_deep
         )
 
         # 4. Use these cell assignments to compute the pz_c redshift histograms in deep SOM.
@@ -141,7 +123,7 @@ class EstimateSomPZPipeline(RailPipeline):
                 model='wide_model',
                 data="input_wide_data"
             ),
-            **wide_som_params,
+            **som_params_wide,
         )
 
         # 7. Compute more weights.
@@ -170,7 +152,7 @@ class EstimateSomPZPipeline(RailPipeline):
                 model='wide_model',
                 data="input_spec_data"
             ),
-            **wide_som_params,
+            **som_params_wide,
         )
 
         # 9. Define a tomographic bin mapping

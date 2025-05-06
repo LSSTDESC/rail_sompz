@@ -4,49 +4,6 @@ from rail.utils.catalog_utils import CatalogConfigBase
 from rail.estimation.algos.sompz import SOMPZInformer
 
 
-bands = ['u','g','r','i','z','y','J','H','F']
-
-deepbands = []
-deeperrs = []
-zeropts = []
-for band in bands:
-    deepbands.append(f'{band}')
-    deeperrs.append(f'{band}_err')
-    zeropts.append(30.)
-
-widebands = []
-wideerrs = []
-for band in bands[:6]:
-    widebands.append(f'{band}')
-    wideerrs.append(f'{band}_err')
-
-refband_deep=deepbands[3]
-refband_wide=widebands[3]
-
-
-som_params_deep = dict(
-    inputs=deepbands,
-    input_errs=deeperrs,
-    zero_points=zeropts,
-    convert_to_flux=True,
-    set_threshold=True,
-    thresh_val=1.e-5,
-    som_shape=[32,32],
-    som_minerror=0.005,
-    som_take_log=False,
-    som_wrap=False,
-)
-
-som_params_wide = dict(
-    inputs=widebands,
-    input_errs=wideerrs,
-    convert_to_flux=True,
-    som_shape=[25, 25],
-    som_minerror=0.005,
-    som_take_log=False,
-    som_wrap=False,
-)
-
 
 class InformSomPZPipeline(RailPipeline):
 
@@ -55,13 +12,41 @@ class InformSomPZPipeline(RailPipeline):
         'input_wide_data':'dummy.in',
     }
 
-    def __init__(self):
+    def __init__(self, wide_catalog_tag: str="SompzWideTestCatalogConfig", deep_catalog_tag: str="SompzDeepTestCatalogConfig", catalog_module: str="rail.sompz.utils"):
         RailPipeline.__init__(self)
+        
+        wide_catalog_class = CatalogConfigBase.get_class(wide_catalog_tag, catalog_module)
+        deep_catalog_class = CatalogConfigBase.get_class(deep_catalog_tag, catalog_module)
 
+        wide_config_dict = wide_catalog_class.build_base_dict()
+        deep_config_dict = deep_catalog_class.build_base_dict()
+
+        som_params_deep = dict(
+            inputs=deep_config_dict['bands'],
+            input_errs=deep_config_dict['err_bands'],
+            zero_points=[30.]*len(deep_config_dict['bands']),
+            convert_to_flux=True,
+            set_threshold=True,
+            thresh_val=1.e-5,
+            som_shape=[32,32],
+            som_minerror=0.005,
+            som_take_log=False,
+            som_wrap=False,
+        )
+
+        som_params_wide = dict(
+            inputs=wide_config_dict['bands'],
+            input_errs=wide_config_dict['err_bands'],
+            zero_points=[30.]*len(wide_config_dict['bands']),                        
+            convert_to_flux=True,
+            som_shape=[25, 25],
+            som_minerror=0.005,
+            som_take_log=False,
+            som_wrap=False,
+        )
+        
         DS = RailStage.data_store
         DS.__class__.allow_overwrite = True
-
-        active_catalog = CatalogConfigBase.active_class()
 
         # 1: train the deep SOM
         self.som_informer_deep = SOMPZInformer.build(
