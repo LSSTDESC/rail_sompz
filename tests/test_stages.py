@@ -3,7 +3,7 @@ from rail.core.stage import RailStage
 from rail.core.data import Hdf5Handle
 from rail.utils.catalog_utils import CatalogConfigBase
 
-from rail.estimation.algos.sompz import SOMPZInformer
+from rail.estimation.algos.sompz import SOMPZInformer, SOMPZEstimatorWide, SOMPZEstimatorDeep
 
 
 deep_catalog_tag: str = "SompzDeepTestCatalogConfig"
@@ -12,6 +12,20 @@ deep_catalog_class = CatalogConfigBase.get_class(
     deep_catalog_tag, catalog_module
 )
 deep_config_dict = deep_catalog_class.build_base_dict()
+
+som_params_deep = dict(
+    inputs=deep_config_dict["bands"],
+    input_errs=deep_config_dict["err_bands"],
+    zero_points=[30.0] * len(deep_config_dict["bands"]),
+    convert_to_flux=True,
+    set_threshold=True,
+    thresh_val=1.0e-5,
+    som_shape=[32, 32],
+    som_minerror=0.005,
+    som_take_log=False,
+    som_wrap=False,
+)
+
 
 wide_catalog_tag: str = "SompzWideTestCatalogConfig"
 catalog_module: str = "rail.sompz.utils"
@@ -66,7 +80,7 @@ def test_informer_wide(get_data):
     results = som_informer_wide.inform(input_data_wide)
 
     
-def xx_deepdeep_estimator(get_data, get_intermediates):
+def xxx_deepdeep_estimator(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
     
@@ -76,9 +90,11 @@ def xx_deepdeep_estimator(get_data, get_intermediates):
     
     som_deepdeep_estimator = SOMPZEstimatorDeep.make_stage(
         name='test_deepdeep_estimator',
-        model='tests/',
+        model='tests/intermediates/model_som_informer_deep.pkl',
+        hdf5_groupname="",
         **som_params_deep,
     )
 
     input_data_deep = DS.read_file('input_data_deep', handle_class=Hdf5Handle, path='tests/romandesc_wide_data_50c_noinf.hdf5')    
-    results = som_informer_wide.inform(input_data_wide)
+    results = som_deepdeep_estimator.estimate(input_data_deep)
+
