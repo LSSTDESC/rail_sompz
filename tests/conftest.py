@@ -47,3 +47,34 @@ def get_data(request: pytest.FixtureRequest) -> int:
 
     request.addfinalizer(remove_data)
     return 0
+
+
+def remove_intermediates() -> None:
+
+    if os.environ.get('NO_TEARDOWN', 0):
+        return
+
+    os.system('\\rm -rf tests/intermediates')   
+    try:
+        os.unlink('tests/intermediates.tgz')
+    except:
+        pass
+
+
+@pytest.fixture(name="get_intermediates", scope="package")
+def get_intermediates(request: pytest.FixtureRequest) -> int:
+    
+    if not os.path.exists("tests/intermediates.tgz"):
+        urllib.request.urlretrieve(
+            "",
+            "tests/intermediates.tgz",
+        )
+        if not os.path.exists("tests/intermediates.tgz"):
+            return 1
+
+    os.system('tar zxvf tests/intermediates.tgz')
+    
+
+    request.addfinalizer(remove_intermediates)
+    return 0
+
