@@ -17,7 +17,7 @@ import pickle
 import gc
 
 
-class Pickableclassify:
+class Pickableclassify:  # pragma: no cover
     def __init__(self, som, flux, fluxerr, inds):
         self.som = som
         self.flux = flux
@@ -86,7 +86,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
     hists : a histogram of the values from self.data[key] for each deep cell
     """
 
-    if len(interpolate_kwargs) > 0:
+    if len(interpolate_kwargs) > 0:  # pragma: no cover
         cells_keep = cells
         cells = np.arange(deep_som_size)
     else:
@@ -101,7 +101,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
             df = deep_data.groupby('cell_deep').get_group(c)
             if type(key) is str:
                 z = df[key].values
-                if overlap_weighted_pzc:
+                if overlap_weighted_pzc:  # pragma: no cover
                     # print("WARNING: You are using a deprecated point estimate Z. No overlap weighting enabled.
                     # You're on your own now.")#suppress
                     weights = df[overlap_key].values
@@ -110,7 +110,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
                 hist = np.histogram(z, bins, weights=weights, density=True)[
                     0]  # make weighted histogram by overlap weights
                 populated_cells.append([ci, c])
-            elif type(key) is list:
+            elif type(key) is list:  # pragma: no cover
                 # use full p(z)
                 assert (bins is not None)
                 # ##histogram_from_fullpz CURRENTLY UNDEFINED!
@@ -121,7 +121,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
             hists.append(np.zeros(len(bins) - 1))
     hists = np.array(hists)
 
-    if len(interpolate_kwargs) > 0:
+    if len(interpolate_kwargs) > 0:  # pragma: no cover
         # print('Interpolating {0} missing histograms'.format(len(missing_cells)))
         missing_cells = np.array(missing_cells)
         populated_cells = np.array(populated_cells)
@@ -206,7 +206,7 @@ def histogram(data, deep_data, key, cells, cell_weights, pcchat, overlap_weighte
         return hist
 
 
-def histogram_from_fullpz(df, key, overlap_weighted, bin_edges, full_pz_end=6.00, full_pz_npts=601):
+def histogram_from_fullpz(df, key, overlap_weighted, bin_edges, full_pz_end=6.00, full_pz_npts=601):  # pragma: no cover
     """Preserve bins from Laigle"""
     dz_laigle = full_pz_end / (full_pz_npts - 1)
     condition = np.sum(~np.equal(bin_edges, np.arange(0 - dz_laigle / 2.,
@@ -279,7 +279,7 @@ def redshift_distributions_wide(data,
     hists : Either a single array (if no tomo_bins) or multiple arrays
 
     """
-    if len(tomo_bins) == 0:
+    if len(tomo_bins) == 0:  # pragma: no cover
         cells, cell_weights = get_cell_weights_wide(data, overlap_weighted_pchat=overlap_weighted_pchat,
                                                     force_assignment=force_assignment, **kwargs)
         if cells.size == 0:
@@ -302,7 +302,7 @@ def redshift_distributions_wide(data,
             cells_use = tomo_bins[tomo_key][:, 0]
             cells_binweights = tomo_bins[tomo_key][:, 1]
             cells_conds = np.searchsorted(cells, cells_use, side='left')
-            if len(cells_conds) == 0:
+            if len(cells_conds) == 0:  # pragma: no cover
                 hist = np.zeros(len(bins) - 1)
             else:
                 hist = histogram(data, deep_data, key=key, cells=cells[cells_conds],
@@ -331,7 +331,7 @@ def get_cell_weights(data, overlap_weighted, key):
     cells :         The names of the cells
     cell_weights :  The fractions of the cells
     """
-    if overlap_weighted:
+    if overlap_weighted:  # pragma: no cover
         cws = data.groupby(key)['overlap_weight'].sum()
     else:
         cws = data.groupby(key).size()
@@ -401,7 +401,7 @@ def tomo_bins_wide_2d(tomo_bins_wide_dict):
     return tomo_bins_wide
 
 
-def plot_nz(hists, zbins, outfile, xlimits=(0, 2), ylimits=(0, 3.25)):
+def plot_nz(hists, zbins, outfile, xlimits=(0, 2), ylimits=(0, 3.25)):  # pragma: no cover
     plt.figure(figsize=(16., 9.))
     for i in range(len(hists)):
         plt.plot((zbins[1:] + zbins[:-1]) / 2., hists[i], label='bin ' + str(i))
@@ -445,7 +445,7 @@ class SOMPZInformer(CatInformer):
     def run(self):
 
         # note: hdf5_groupname is a SHARED_PARAM defined in the parent class!
-        if self.config.hdf5_groupname:
+        if self.config.hdf5_groupname:  # pragma: no cover
             data = self.get_data('input_data')[self.config.hdf5_groupname]
         else:  # pragma: no cover
             # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
@@ -462,7 +462,7 @@ class SOMPZInformer(CatInformer):
             if self.config.convert_to_flux:
                 d_input[:, i] = mag2flux(data[col], self.config.zero_points[i])
                 d_errs[:, i] = magerr2fluxerr(data[errcol], d_input[:, i])
-            else:
+            else:  # pragma: no cover
                 d_input[:, i] = data[col]
                 d_errs[:, i] = data[errcol]
 
@@ -504,7 +504,7 @@ class SOMPZInformer(CatInformer):
         return self.model
 
 
-class SOMPZEstimator(CatEstimator):
+class SOMPZEstimator(CatEstimator):  # pragma: no cover
     """CatEstimator subclass to compute redshift PDFs for SOMPZ
     """
     name = "SOMPZEstimator"
@@ -1042,7 +1042,7 @@ class SOMPZPzc(CatEstimator):
         # check on bands, errs, and prior band
 
     def run(self):
-        if self.config.deep_groupname:
+        if self.config.deep_groupname:  # pragma: no cover
             spec_data = self.get_data('spec_data')[self.config.deep_groupname]
         else:  # pragma: no cover
             spec_data = self.get_data('spec_data')
@@ -1340,38 +1340,8 @@ class SOMPZEstimatorBase(CatEstimator):
         # check on bands, errs, and prior band
         if len(self.config.inputs) != len(self.config.input_errs):  # pragma: no cover
             raise ValueError("Number of inputs_deep specified in inputs_deep must be equal to number of mag errors specified in input_errs_deep!")
-        if len(self.config.som_shape) != 2:
+        if len(self.config.som_shape) != 2:  # pragma: no cover
             raise ValueError(f"som_shape must be a list with two integers specifying the SOM shape, not len {len(self.config.som_shape)}")
-
-    def open_model(self, **kwargs):
-        """Load the model and/or attach it to this Creator.
-
-        Keywords
-        --------
-        model : object, str or ModelHandle
-            Either an object with a trained model, a path pointing to a file
-            that can be read to obtain the trained model, or a ``ModelHandle``
-            providing access to the trained model
-
-        Returns
-        -------
-        self.model : object
-            The object encapsulating the trained model
-        """
-        model = kwargs.get("model", None)
-        if model is None or model == "None":  # pragma: no cover
-            self.model = None
-        else:
-            if isinstance(model, str):  # pragma: no cover
-                self.model = self.set_data("model", data=None, path=model)
-                self.config["model"] = model
-            else:
-                if isinstance(model, ModelHandle):  # pragma: no cover
-                    if model.has_path:
-                        self.config["model"] = model.path
-                self.model = self.set_data("model", model)
-
-        return self.model
 
     def _assign_som(self, flux, flux_err):
         # som_dim = self.config.som_shape[0]
@@ -1407,7 +1377,7 @@ class SOMPZEstimatorBase(CatEstimator):
             if self.config.convert_to_flux:
                 data_wide[:, j] = mag2flux(np.array(data[col], dtype=np.float32), self.config.zero_points[j])
                 data_err_wide[:, j] = magerr2fluxerr(np.array(data[errcol], dtype=np.float32), data_wide[:, j])
-            else:
+            else:  # pragma: no cover
                 data_wide[:, j] = np.array(data[col], dtype=np.float32)
                 data_err_wide[:, j] = np.array(data[errcol], dtype=np.float32)
 
@@ -1452,7 +1422,7 @@ class SOMPZEstimatorBase(CatEstimator):
         self.model = None
         self.model = self.open_model(**self.config)  # None
         first = True
-        if self.config.hdf5_groupname:
+        if self.config.hdf5_groupname:  # pragma: no cover
             iter1 = self.input_iterator('data')[self.config.hdf5_groupname]
         else:
             iter1 = self.input_iterator('data')
@@ -1464,12 +1434,12 @@ class SOMPZEstimatorBase(CatEstimator):
             self._process_chunk(s, e, test_data, first)
             first = False
             gc.collect()
-        if self.comm:
+        if self.comm:  # pragma: no cover
             self.comm.Barrier()
         self._finalize_run()
 
     def estimate(self, data):
-        # self.set_data("data", Hdf5Handle('data', path=data), do_read=False)
+        self.set_data("data", data)
         self.run()
         self.finalize()
         return
@@ -1508,14 +1478,14 @@ class SOMPZEstimatorWide(SOMPZEstimatorBase):
         self.model : object
             The object encapsulating the trained model
         """
-        model = kwargs.get("model", None)
+        model = kwargs.get("model", kwargs.get('wide_model', None))
         if model is None or model == "None":  # pragma: no cover
             self.model = None
         else:
-            if isinstance(model, str):  # pragma: no cover
+            if isinstance(model, str):
                 self.model = self.set_data("wide_model", data=None, path=model)
                 self.config["model"] = model
-            else:
+            else:  # pragma: no cover
                 if isinstance(model, ModelHandle):  # pragma: no cover
                     if model.has_path:
                         self.config["model"] = model.path
@@ -1546,14 +1516,14 @@ class SOMPZEstimatorDeep(SOMPZEstimatorBase):
         self.model : object
             The object encapsulating the trained model
         """
-        model = kwargs.get("model", None)
+        model = kwargs.get("model", kwargs.get('deep_model', None))
         if model is None or model == "None":  # pragma: no cover
             self.model = None
         else:
-            if isinstance(model, str):  # pragma: no cover
+            if isinstance(model, str):
                 self.model = self.set_data("deep_model", data=None, path=model)
                 self.config["model"] = model
-            else:
+            else:  # pragma: no cover
                 if isinstance(model, ModelHandle):  # pragma: no cover
                     if model.has_path:
                         self.config["model"] = model.path

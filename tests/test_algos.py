@@ -8,17 +8,17 @@ import yaml
 import tables_io
 from rail.core.stage import RailStage
 from rail.core.data import DataStore, TableHandle
-from rail.core.utils import RAILDIR
-from rail.core.algo_utils import one_algo
-from rail.estimation.algos import sompz_lite
+from rail.utils.path_utils import RAILDIR
+from rail.utils.testing_utils import one_algo
+from rail.estimation.algos import sompz
 from rail.sompz.utils import RAIL_SOMPZ_DIR
 
 import scipy.special
 sci_ver_str = scipy.__version__.split('.')
 
-#parquetdata = "./tests/validation_10gal.pq"
-#traindata = os.path.join(RAILDIR, 'rail/examples_data/testdata/training_100gal.hdf5')
-#validdata = os.path.join(RAILDIR, 'rail/examples_data/testdata/validation_10gal.hdf5')
+parquetdata = "./tests/validation_10gal.pq"
+traindata = os.path.join(RAILDIR, 'rail/examples_data/testdata/training_100gal.hdf5')
+validdata = os.path.join(RAILDIR, 'rail/examples_data/testdata/validation_10gal.hdf5')
 
 DS = RailStage.data_store
 DS.__class__.allow_overwrite = True
@@ -54,7 +54,14 @@ def test_sompz_train(ntarray):
     """
 
 
-def test_sompz():
+@pytest.mark.parametrize(
+    "inputdata, groupname",
+    [
+        (parquetdata, ""),
+        (validdata, "photometry")
+    ]
+)
+def test_sompz(inputdata, groupname):
     """
     train_config_dict = {}
     estim_config_dict = {'zmin': 0.0, 'zmax': 3.0,
@@ -81,10 +88,3 @@ def test_sompz():
     assert np.isclose(results.ancil['zmode'], zb_expected).all()
     assert np.isclose(results.ancil['zmode'], rerun_results.ancil['zmode']).all()
     """
-@pytest.mark.parametrize(
-    "inputdata, groupname",
-    [
-        (parquetdata, ""),
-        (validdata, "photometry")
-        ]
-)
