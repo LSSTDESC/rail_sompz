@@ -66,14 +66,13 @@ def get_intermediates(request: pytest.FixtureRequest) -> int:
     
     if not os.path.exists("tests/intermediates.tgz"):
         urllib.request.urlretrieve(
-            "",
+            "https://s3df.slac.stanford.edu/people/echarles/xfer/intermediates.tgz",
             "tests/intermediates.tgz",
         )
         if not os.path.exists("tests/intermediates.tgz"):
             return 1
-
-    os.system('tar zxvf tests/intermediates.tgz')
-    
+        os.system('tar zxvf tests/intermediates.tgz')
+        os.system('mv intermediates tests')    
 
     request.addfinalizer(remove_intermediates)
     return 0

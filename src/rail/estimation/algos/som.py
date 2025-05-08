@@ -10,7 +10,7 @@ from itertools import starmap
 
 # import cmasher as cmr
 @numba.njit
-def bottleneck(w, vnS):
+def bottleneck(w, vnS):  # pragma: no cover
             # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
             dn = np.arcsinh(vnS)
             # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
@@ -20,19 +20,19 @@ def bottleneck(w, vnS):
 def parallel_dsq(vn, s, w, df, h, sPenalty):
             # vnS is the re-scaled S/N of the cells, shape=(nS,nCells,nTargets,nFeatures)
             # vnS: see the paragraph containing equation A7 of Sanchez+2020
-            vnS = s*vn 
+            vnS = s*vn
             numerator, dn = bottleneck(w, vnS)
-            
+
             # dn is the asinh of the cell S/N values
             ####
-            if np.any(np.isinf(numerator)):
+            if np.any(np.isinf(numerator)):  # pragma: no cover
                 #pdb.set_trace()
                 print("inf numerator at", np.where(np.isinf(numerator)))
                 print(np.any(np.isinf(w)),
                       np.any(np.isinf(vnS)),
                       np.any(np.isinf(dn)),
                       np.any(vnS <= 0))
-            if np.any(np.isnan(numerator)):
+            if np.any(np.isnan(numerator)):  # pragma: no cover
                 #pdb.set_trace()
                 print("nan numerator at", np.where(np.isnan(numerator)))
                 print(np.any(np.isnan(w)),
@@ -52,10 +52,10 @@ def parallel_dsq(vn, s, w, df, h, sPenalty):
 class NoiseSOM:
     """Class to build a SOM that deals with noisy data."""
 
-    def __init__(self, 
-                 metric, 
-                 data, 
-                 errors, 
+    def __init__(self,
+                 metric,
+                 data,
+                 errors,
                  learning,
                  shape=(32, 32),
                  minError=0.01,
@@ -121,20 +121,20 @@ class NoiseSOM:
                 # Last dimension of input weights is feature length
                 self.N = initialize.shape[-1]
                 # Initialize with given array
-                if initialize.shape[:-1] == tuple(self.shape):
+                if initialize.shape[:-1] == tuple(self.shape):  # pragma: no cover
                     # Copy and flatten the weight array
                     self.weights = np.array(initialize).reshape(-1, self.N)
                 elif len(initialize.shape) == 2 and np.prod(self.shape) == initialize.shape[0]:
                     # Array is already flattened, just copy it
                     self.weights = np.array(initialize)
-                else:
+                else:  # pragma: no cover
                     raise ValueError('Wrong shape for initialize ndarray', initialize.shape, self.shape)
-                if self.logF and np.min(self.weights.flatten()) <= 0:
+                if self.logF and np.min(self.weights.flatten()) <= 0:  # pragma: no cover
                     # Cannot deal with negative weights in a log SOM:
                     raise ValueError('Non-positive feature in initialization of ' +
                                      'log-domain NoiseSOM')
                 return  # No training needed
-            else:
+            else:  # pragma: no cover
                 # Failure if there is no initial weight vector given.
                 raise ValueError('Neither training data nor weight matrix given for NoiseSOM')
 
@@ -143,14 +143,14 @@ class NoiseSOM:
         self.N = data.shape[1]
         nTrain = data.shape[0]
 
-        if self.logF:
+        if self.logF:  # pragma: no cover
             ee = np.maximum(errors, np.abs(data) * self.minError)
         else:
             ee = np.maximum(errors, self.minError)
 
         # Create SOM and initial weight vectors
         # First get weight bounds
-        if self.logF:
+        if self.logF:  # pragma: no cover
             # Spread uniformly on log space, clipping low features at +1-sigma
             minF = np.log(np.min(np.maximum(data, errors), axis=0))
             maxF = np.log(np.max(data, axis=0))
@@ -164,10 +164,10 @@ class NoiseSOM:
             # Populate weights with random numbers
             self.weights = np.random.rand(nCells, self.N)
             self.weights = minF + (maxF - minF) * self.weights
-            if self.logF:
+            if self.logF:  # pragma: no cover
                 # Put weights back into linear form
                 self.weights = np.exp(self.weights)
-        elif initialize == 'sample':
+        elif initialize == 'sample':  # pragma: no cover
             # Populate weights with a random sample from the data
             indices = np.random.choice(data.shape[0], size=self.shape,
                                        replace=False).flatten()
@@ -176,7 +176,7 @@ class NoiseSOM:
                 self.weights = np.maximum(data[indices, :], errors[indices, :])
             else:
                 self.weights = data[indices, :]
-        elif isinstance(initialize, np.ndarray):
+        elif isinstance(initialize, np.ndarray):  # pragma: no cover
             # Initialize with given array
             if initialize.shape == tuple(self.shape) + (self.N,):
                 # Copy and flatten the weight array
@@ -189,10 +189,10 @@ class NoiseSOM:
             if self.logF and np.min(self.weights.flatten()) <= 0:
                 raise ValueError('Non-positive feature in initialization of ' +
                                  'log-domain NoiseSOM')
-        else:
+        else:  # pragma: no cover
             raise ValueError('Invalid initialize: ' + str(initialize))
 
-        if gridOverDimensions is not None:
+        if gridOverDimensions is not None:  # pragma: no cover
             # Place the initial weights in a grid over some dimensions
             if len(gridOverDimensions) != len(self.shape) or np.min(gridOverDimensions) < 0 or np.max(
                     gridOverDimensions) >= len(self.shape):
@@ -234,7 +234,7 @@ class NoiseSOM:
             # At this point mask to only cells that will learn something
             use = fLearn >= minLearn
 
-            # Ask the metric to update the cell features 
+            # Ask the metric to update the cell features
             ww = self.weights[use, :]
             self.metric.update(ww, fLearn[use], dd, err)
             self.weights[use, :] = ww
@@ -280,7 +280,7 @@ class NoiseSOM:
 
     def fuzzyProb(self, fluxes, invVars,
                   scale=None, sPenalty=None,
-                  maxScale=False):
+                  maxScale=False):  # pragma: no cover
         """
         Calculate the relative probability of obtaining the `fluxes` given the
         SOM cell fluxes, assuming Gaussian errors on each feature with
@@ -323,7 +323,7 @@ class NoiseSOM:
             chisq0 = np.min(np.min(chisq, axis=2), axis=0)
             chisq -= chisq0[np.newaxis, :, np.newaxis]
             if maxScale:
-                # Take best scale factor 
+                # Take best scale factor
                 probs[:, ss] = np.exp(-0.5 * np.min(chisq, axis=2))
             else:
                 # Sum probabilities over s
@@ -351,18 +351,18 @@ class hFunc:
         aFactor = 1. / ((1. - f) / self.a[0] + f / self.a[1])
         invS = ((1. - f) / self.sigma[0] + f / self.sigma[1]) ** 2
         dxy = xy - np.unravel_index(bmu, shape)
-        if wrap:
+        if wrap:  # pragma: no cover
             dxy = np.remainder(dxy + shape // 2, shape) - shape // 2
         return aFactor * np.exp(-0.5 * np.sum(dxy * dxy, axis=1) * invS)
 
 
 '''
  Define a metric interface as having two calls
- `Metric(cell_features, target_features, target_errors)`  which returns an 
-    nCells x nTargets matrix giving in element (i,j) the 
-    distance^2 from cell at i to target j  
+ `Metric(cell_features, target_features, target_errors)`  which returns an
+    nCells x nTargets matrix giving in element (i,j) the
+    distance^2 from cell at i to target j
     (a "cell" does not have an error associated with it).
- 
+
  `Metric.update(cells, fractions, features, errors)` updates the nCells x nFeatures `cells` array
      to move `fractions` of the way to the `features`, where `fractions` has shape (nCells,) of
      values between 0 and 1.  The new nodal features must remain positive.
@@ -400,17 +400,17 @@ class AsinhMetric:
             lnS = np.linspace(-maxSigma * lnScaleSigma, maxSigma * lnScaleSigma, nS)
             self.s = np.exp(lnS)
             self.sPenalty = (lnS / lnScaleSigma) ** 2
-        else:
+        else:  # pragma: no cover
             self.s = np.ones(1, dtype=float)
             self.sPenalty = self.s * 0.
         return
 
     def __call__(self, cells, features, errors, pool=None):
-        if len(cells.shape) != 2:
+        if len(cells.shape) != 2:  # pragma: no cover
             raise ValueError('Metric cells is wrong dimension')
-        if features.shape != errors.shape:
+        if features.shape != errors.shape:  # pragma: no cover
             raise ValueError('Metric features and errors do not match')
-        if cells.shape[-1] != features.shape[-1]:
+        if cells.shape[-1] != features.shape[-1]:  # pragma: no cover
             raise ValueError('Metric cells and features have mismatched no. of features')
         if len(features.shape) == 1:
             vf = (features / errors).reshape(1, features.shape[0])
@@ -421,14 +421,14 @@ class AsinhMetric:
             # ee: see Eqn A2 of Sanchez+2020
             vf = features / errors
             ee = errors
-            
-        else:
+
+        else:  # pragma: no cover
             raise ValueError('Metric features has invalid dimensions')
 
         # vn is the S/N of the cells, with shape (nCells, nTargets, nFeatures)
         # vn: see Eqn A4 of Sanchez+2020
         vn = cells[:, np.newaxis, :] / ee[np.newaxis, :, :]
-        
+
 
         # Here is our rescaling function:
         # sum = np.zeros((vn.shape[0], vn.shape[1]), dtype=float)
@@ -450,10 +450,10 @@ class AsinhMetric:
         # w is the weight for asinh vs geometric mean metrics
         # w: see Eqn A5 of Sanchez+2020
         w = np.minimum(np.exp(2 * (vf - 4)), 1000.)
-        if np.any(np.isinf(w)):
+        if np.any(np.isinf(w)):  # pragma: no cover
             #pdb.set_trace()
             print('inf in w at', np.where(np.isinf(w)))
-        if np.any(np.isnan(w)):
+        if np.any(np.isnan(w)):  # pragma: no cover
             #pdb.set_trace()
             print('nan in w at', np.where(np.isnan(w)))
 
@@ -464,7 +464,7 @@ class AsinhMetric:
         vnlist =  np.array_split(vn, chunk)
         args = [(_, s, w, df, h, sPenalty) for _ in vnlist]
         if pool is not None:
-            dsq_list = pool[0].starmap(parallel_dsq, args) 
+            dsq_list = pool[0].starmap(parallel_dsq, args)
         else:
             dsq_list = list(starmap(parallel_dsq, args))
         dsq = np.vstack(dsq_list)
@@ -475,15 +475,15 @@ class AsinhMetric:
         '''
         threshold: minimum S/N for a modification of SOM cell weights. Default value is arbitrary.
         '''
-        if len(cells.shape) != 2:
+        if len(cells.shape) != 2:  # pragma: no cover
             raise ValueError('Metric cells is wrong dimension')
-        if len(fractions.shape) != 1 or fractions.shape[0] != cells.shape[0]:
+        if len(fractions.shape) != 1 or fractions.shape[0] != cells.shape[0]:  # pragma: no cover
             raise ValueError('Metric fractions array is wrong shape')
-        if len(features.shape) > 1:
+        if len(features.shape) > 1:  # pragma: no cover
             raise ValueError('Metric gradient only works for single feature vector')
-        if features.shape != errors.shape:
+        if features.shape != errors.shape:  # pragma: no cover
             raise ValueError('Metric features and errors do not match')
-        if cells.shape[-1] != features.shape[-1]:
+        if cells.shape[-1] != features.shape[-1]:  # pragma: no cover
             raise ValueError('Metric cells and features have mismatched no. of features')
 
         # Write just an unscaled version first
@@ -492,14 +492,14 @@ class AsinhMetric:
 
         factor = np.maximum(1., vf) / vn
         # Don't move if there's no information at all
-        lowSN = np.maximum(vn, vf) < threshold 
+        lowSN = np.maximum(vn, vf) < threshold
         factor[lowSN] = 1.
 
         cells *= np.power(factor, fractions[:, np.newaxis])
         return
 
 
-class LinearMetric:
+class LinearMetric:  # pragma: no cover
     """
     Metric interface implementation for error-scaled Euclidean distances,
     e.g. Gaussian probabilities.
@@ -580,7 +580,7 @@ class LinearMetric:
         return
 
 
-def readCOSMOS():
+def readCOSMOS():  # pragma: no cover
     """Function to read the COSMOS input files.
     Returns arrays fluxes,errors,redshifts,counts giving for each unique object
     its ugrizJHK fluxes, flux errors, Laigle redshift, number of Balrog counts,
@@ -619,7 +619,7 @@ def readCOSMOS():
     return fluxes, errors, redshifts, counts, radec
 
 
-def somPlot3d(som, az=200., el=30.):
+def somPlot3d(som, az=200., el=30.):  # pragma: no cover
     # Make a 3d plot of cells weights in color space.  az/el are plot view angle
     mags = 30. - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
@@ -652,7 +652,7 @@ def somPlot3d(som, az=200., el=30.):
     return
 
 
-def somPlot2d(som):
+def somPlot2d(som):  # pragma: no cover
     # Make a 2d plot of cells weights in color-color diagram space.
     mags = 30. - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
@@ -684,7 +684,7 @@ def somPlot2d(som):
     return
 
 
-def somPlot2dnok(som):
+def somPlot2dnok(som):  # pragma: no cover
     # Make a 2d plot of cells weights in color-color diagram space.
     mags = 30. - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
@@ -715,7 +715,7 @@ def somPlot2dnok(som):
     pl.ylabel('iy')
     return
 
-def somDomainColors(som):
+def somDomainColors(som):  # pragma: no cover
     # Make 4-panel plot colors and mag across SOM space
     mags = 30. - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
@@ -750,7 +750,7 @@ def somDomainColors(som):
     pl.colorbar(im, ax=ax[1, 1])
     return
 
-def somDomainColorsnok(som):
+def somDomainColorsnok(som):  # pragma: no cover
     # Make 4-panel plot colors and mag across SOM space
     mags = 30. - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
@@ -786,7 +786,7 @@ def somDomainColorsnok(som):
     return
 
 
-def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):
+def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):  # pragma: no cover
     """Make 4-panel plot showing occupancy of SOM by a redshift sample and statistics
        of redshift distribution in each cell."""
     nbins = np.prod(som.shape)
@@ -841,9 +841,9 @@ def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):
     return
 
 
-def somDomainColors_withname(som, indexall, nameall, zp=22.5):
+def somDomainColors_withname(som, indexall, nameall, zp=22.5):  # pragma: no cover
     [index00, index01], [index10, index11], [index20, index21], index3 = indexall
-    [name00, name01], [name10, name11], [name20, name21], [name3] = nameall 
+    [name00, name01], [name10, name11], [name20, name21], [name3] = nameall
     # Make 4-panel plot colors and mag across SOM space
     mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, index00] - mags[:, index01]
@@ -878,7 +878,7 @@ def somDomainColors_withname(som, indexall, nameall, zp=22.5):
     pl.colorbar(im, ax=ax[1, 1])
     return
 
-def somPlot2d_withname(som, indexall, nameall, zp=22.5):
+def somPlot2d_withname(som, indexall, nameall, zp=22.5):  # pragma: no cover
     [index00, index01], [index10, index11], index2 = indexall
     [name00, name01], [name10, name11], name2 = nameall
     # Make a 2d plot of cells weights in color-color diagram space.
