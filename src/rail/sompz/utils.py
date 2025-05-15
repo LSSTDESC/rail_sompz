@@ -74,6 +74,7 @@ class SompzWideTestCatalogConfig(CatalogConfigBase):
     """Configuration for SOMPZ test data wide field"""
 
     tag = "som_pz_wide"
+    hdf5_groupname = ""
     bandlist = ['u', 'g', 'r', 'i', 'z', 'y']
     maglims = [26.4, 27.8, 27.1, 26.7, 25.8, 24.6]
     a_env = [4.81, 3.64, 2.70, 2.06, 1.58, 1.31]
@@ -88,6 +89,7 @@ class SompzDeepTestCatalogConfig(CatalogConfigBase):
     """Configuration for SOMPZ test data deep field"""
 
     tag = "som_pz_deep"
+    hdf5_groupname = ""
     bandlist = ['u', 'g', 'r', 'i', 'z', 'y', 'J', 'H', 'F']
     maglims = [26.4, 27.8, 27.1, 26.7, 25.8, 24.6, 27.8, 28.1, 27.5]
     a_env = [4.81, 3.64, 2.70, 2.06, 1.58, 1.31, 0.68, 0.60, 0.47]
