@@ -91,6 +91,9 @@ class SompzDeepTestCatalogConfig(CatalogConfigBase):
     bandlist = ['u', 'g', 'r', 'i', 'z', 'y', 'J', 'H', 'F']
     maglims = [26.4, 27.8, 27.1, 26.7, 25.8, 24.6, 27.8, 28.1, 27.5]
     a_env = [4.81, 3.64, 2.70, 2.06, 1.58, 1.31, 0.68, 0.60, 0.47]
+    lsst_err_band_replace = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    replace_error_vals = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
+    zp_errors = [0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1, 0.1]
     band_template = "{band}"
     band_err_template = "{band}_err"
     filter_file_template = "DC2LSST_{band}"
