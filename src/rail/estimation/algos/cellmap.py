@@ -1,9 +1,7 @@
 import numpy as np
-import numba
 import pandas as pd
 import h5py
 
-from .som import SelfOrganizingMap, unravel_index
 
 class CellMap(object):
     """This class will link to two Self-Organizing Maps.
@@ -15,17 +13,24 @@ class CellMap(object):
 
         Parameters
         ----------
-        data :              A pandas dataframe of galaxies with both deep and
-                            wide observations. It must contain the
-                            wide_columns, wide_err_columns, deep_columns, and
-                            deep_err_columns.
-        wide_som :          SelfOrganizingMap object trained on the wide fluxes
-        deep_som :          SelfOrganizingMap object trained on the deep fluxes
-        pcchat :            An array of shape (n_tomo_bins, prod(*som.map_shape),
-                            prod(*som.map_shape)) which gives the probability
-                            of a galaxy really being in cell c given that it is
-                            in cell chat. This may or may not have come from
-                            data -- we could train this on some other sample.
+        data
+            A pandas dataframe of galaxies with both deep and
+            wide observations. It must contain the
+            wide_columns, wide_err_columns, deep_columns, and
+            deep_err_columns.
+
+        wide_som
+            SelfOrganizingMap object trained on the wide fluxes
+
+        deep_som
+            SelfOrganizingMap object trained on the deep fluxes
+
+        pcchat
+            An array of shape (n_tomo_bins, `prod(*som.map_shape)`,
+            `prod(*som.map_shape)`) which gives the probability
+            of a galaxy really being in cell c given that it is
+            in cell chat. This may or may not have come from
+            data -- we could train this on some other sample.
         """
         # TODO determine best place to implement overlap_weight
         # TODO determine best place to implement column names
@@ -235,7 +240,7 @@ class CellMapDESY3(CellMap):
             overlap_weight, wide_columns, wide_err_columns,
             deep_columns, deep_err_columns,
             data_train_deep, data_train_wide,
-            .zp, deep_kwargs={}, wide_kwargs={}, **kwargs):
+            zp, deep_kwargs={}, wide_kwargs={}, **kwargs):
         # overlap_weight: Weights of galaxies in spec_data, to account for shear response, or uneven number of times these galaxies were drawn in the wide data
 
         t0 = time.time()
