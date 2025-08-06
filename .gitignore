@@ -1,5 +1,8 @@
-*.h5
+out/
+tests/old
 *.hdf5
+*.h5
+*.out
 *.npz
 *.pkl
 *.py~
@@ -15,6 +18,7 @@ __pycache__/
 *.so
 
 # Distribution / packaging
+_version.py
 .Python
 build/
 develop-eggs/
