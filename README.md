@@ -9,7 +9,21 @@
 **sompz** - RAIL estimator, summarizer, and classifier using the SOMPZ method described in [Buchs, Davis, et al. 2019](https://arxiv.org/pdf/1901.05005.pdf), [Sánchez, Raveri, Alarcon, Bernstein 2020](https://arxiv.org/pdf/2004.09542.pdf), [Myles, Alarcon et al. 2021](https://arxiv.org/pdf/2012.08566.pdf) and [Campos, et al. 2024](https://arxiv.org/pdf/2408.00922). 
 
 
-The main product is the galaxy ensemble tomographic redshift distributions $n(z)$, which are output for a sample as a `qp` ensemble. The code additionally saves the two Self-Organizing Maps (SOMs) constructed for $n(z)$ inference and assignment indices of the input galaxy samples to their respective SOMs.
+The main product is the galaxy ensemble tomographic bin assignments and associated redshift distributions $n(z)$, which are output for a sample as a `qp` ensemble. The code additionally saves the two Self-Organizing Maps (SOMs) constructed for $n(z)$ inference and assignment indices of the input galaxy samples to their respective SOMs.
+
+The SOMPZ algorithm generates redshift distributions for a sample of galaxies with a multi-step inference formalism. Based on observations of a wide-field imaging dataset catalog and a deep-field imaging dataset catalog (traditionally lower-noise optical bands and additional near-infrared bands), the algorithm takes three primary tabular data inputs:
+
+- `spec_data`: a catalog with secure redshifts, deep-field photometry, and simulated wide-field photometry
+- `balrog_data` : a catalog with deep-field photometry and simulated wide-field photometry
+- `wide_data`: a catalog with wide-field photometry
+
+In practice, `spec_data` is a subset of `balrog_data`.
+
+These catalogs are used to train two SOMs: one built with deep-field photometry and the other built with wide-field photometry.
+
+Once all samples are assigned to the wide SOM and `spec_data` and `balrog_data` are assigned to the deep SOM the wide SOM cells can be grouped into tomographic bins via a tomographic binning algorithm. The redshift distributions are computed as follows:
+
+$$ n(z|\hat{b}, \hat{s}) = \sum_{\hat{c} \in \hat{b}} \sum_{c \in \hat{c}} p(z|c, \hat{s}) p(c|\hat{c}, \hat{s}) p(\hat{c}| \hat{s}) $$
 
 # RAIL: Redshift Assessment Infrastructure Layers
 
