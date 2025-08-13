@@ -718,7 +718,7 @@ def somPlot2dnok(som, zp=30.):  # pragma: no cover
 def somDomainColors(som, zp=30., 
                     bands=['u', 'g', 'r', 'i', 'z', 'y', 'J', 'H', 'F'], 
                     indices = [0, 1, 3, 7],
-                    index_mag = 2):  # pragma: no cover
+                    index_mag = 3):  # pragma: no cover
     # Make 4-panel plot colors and mag across SOM space
     mags = zp - 2.5 * np.log10(som.weights)
 
@@ -754,7 +754,7 @@ def somDomainColors(som, zp=30.,
 
     im = ax[1, 1].imshow(imag.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral')
-    ax[1, 1].set_title(f'{bands[indices[3]]} mag')
+    ax[1, 1].set_title(f'{bands[index_mag]} mag')
     ax[1, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 1])
     return fig

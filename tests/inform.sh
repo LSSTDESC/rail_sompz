@@ -1,15 +1,18 @@
 #!/bin/bash
 #SBATCH --qos=regular
-#SBATCH --time=05:00:00
+#SBATCH --time=47:59:00
 #SBATCH --nodes=1
 #SBATCH -C cpu
 #SBATCH --error="inform.err"
 #SBATCH --output="inform.out"
+#SBATCH --mail-type=ALL
+#SBATCH --mail-user=jmyles@astro.princeton.edu
 
 module load python
 module swap PrgEnv-${PE_ENV,,} PrgEnv-gnu
 module load PrgEnv-gnu
 module load cray-hdf5-parallel
+
 #conda activate sompz
 #conda activate rail_mpi4py
 conda activate rail_sompz

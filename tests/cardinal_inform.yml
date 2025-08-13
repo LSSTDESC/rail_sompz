@@ -1,11 +1,11 @@
-output_dir: out
-log_dir: out
-resume: false
+output_dir: .
+log_dir: .
+resume: true
 config: cardinal_inform_config.yml
 modules: rail
 inputs:
-  input_deep_data: ./cardinal/balrog_data.hdf5
-  input_wide_data: ./cardinal/wide_data.hdf5
+  input_deep_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/balrog_data.hdf5
+  input_wide_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/wide_data_subsample.hdf5
 stages:
 - name: som_deep_informer_big
   classname: SOMPZInformer

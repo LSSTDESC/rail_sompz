@@ -1,46 +1,46 @@
-output_dir: out
-log_dir: out
+output_dir: .
+log_dir: .
 resume: true
 config: cardinal_estimate_config.yml
 modules: rail
 inputs:
-  deep_model: out/CARDINAL_model_deep.pkl
-  wide_model: out/CARDINAL_model_wide.pkl
-  input_deep_data: ./cardinal/balrog_data.hdf5
-  input_spec_data: ./cardinal/spec_data.hdf5
-  input_wide_data: ./cardinal/wide_data.hdf5
+  deep_model: CARDINAL_model_deep.pkl
+  wide_model: CARDINAL_model_wide.pkl
+  input_deep_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/balrog_data.hdf5
+  input_spec_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/spec_data_subsample.hdf5
+  input_wide_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/wide_data_subsample.hdf5
 stages:
 - name: som_deepdeep_estimator
   classname: SOMPZEstimatorDeep
-  nprocess: 5
+  nprocess: 128
   module_name: rail.estimation.algos.sompz
   aliases:
     data: input_deep_data
     assignment: assignment_som_deepdeep_estimator
 - name: som_deepwide_estimator
   classname: SOMPZEstimatorWide
-  nprocess: 5
+  nprocess: 128
   module_name: rail.estimation.algos.sompz
   aliases:
     data: input_deep_data
     assignment: assignment_som_deepwide_estimator
 - name: som_deepspec_estimator
   classname: SOMPZEstimatorDeep
-  nprocess: 5
+  nprocess: 128
   module_name: rail.estimation.algos.sompz
   aliases:
     assignment: assignment_som_deepspec_estimator
     data: input_spec_data
 - name: som_widewide_estimator
   classname: SOMPZEstimatorWide
-  nprocess: 5
+  nprocess: 128
   module_name: rail.estimation.algos.sompz
   aliases:
     assignment: assignment_som_widewide_estimator
     data: input_wide_data
 - name: som_widespec_estimator
   classname: SOMPZEstimatorWide
-  nprocess: 5
+  nprocess: 128
   module_name: rail.estimation.algos.sompz
   aliases:
     assignment: assignment_som_widespec_estimator

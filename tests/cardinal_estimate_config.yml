@@ -9,35 +9,38 @@ som_deepdeep_estimator:
   recompute_point_estimates: false
   redshift_col: Z
   inputs: &id002
-  - MAG_U
-  - MAG_G
-  - MAG_R
-  - MAG_I
-  - MAG_Z
-  - MAG_VISTA_Filters_at80K_forETC_J
-  - MAG_VISTA_Filters_at80K_forETC_H
-  - MAG_VISTA_Filters_at80K_forETC_Ks  
+  - TRUEMAG_lsst_u
+  - TRUEMAG_lsst_g
+  - TRUEMAG_lsst_r
+  - TRUEMAG_lsst_i
+  - TRUEMAG_lsst_z
+  - TRUEMAG_lsst_y
+  - TRUEMAG_J129
+  - TRUEMAG_H158
+  - TRUEMAG_F184  
   input_errs: &id003
-  - MAGERR_U
-  - MAGERR_G
-  - MAGERR_R
-  - MAGERR_I
-  - MAGERR_Z
-  - MAGERR_VISTA_Filters_at80K_forETC_J
-  - MAGERR_VISTA_Filters_at80K_forETC_H
-  - MAGERR_VISTA_Filters_at80K_forETC_Ks    
+  - TRUEMAG_ERR_lsst_u
+  - TRUEMAG_ERR_lsst_g
+  - TRUEMAG_ERR_lsst_r
+  - TRUEMAG_ERR_lsst_i
+  - TRUEMAG_ERR_lsst_z
+  - TRUEMAG_ERR_lsst_y
+  - TRUEMAG_ERR_Roman_J129
+  - TRUEMAG_ERR_Roman_H158
+  - TRUEMAG_ERR_Roman_F184  
   zero_points: &id004
   - 30.0
   - 30.0
   - 30.0
   - 30.0
+  - 30.0  
   - 30.0
   - 30.0
   - 30.0
   - 30.0  
   som_shape: &id005
-  - 64
-  - 64
+  - 32
+  - 32
   som_minerror: 0.01
   som_wrap: false
   som_take_log: false
@@ -46,9 +49,9 @@ som_deepdeep_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_deepdeep_estimator
-  model: out/CARDINAL_model_deep.pkl
+  model: CARDINAL_model_deep.pkl
   assignment: deepdata_deep_assignment.hdf5
-  data: ./cardinal/balrog_data.hdf5
+  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/balrog_data.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_deepwide_estimator:
@@ -90,9 +93,9 @@ som_deepwide_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_deepwide_estimator
-  model: out/CARDINAL_model_wide.pkl
+  model: CARDINAL_model_wide.pkl
   assignment: deepdata_wide_assignment.hdf5
-  data: ./cardinal/balrog_data.hdf5
+  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/balrog_data.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_deepspec_estimator:
@@ -117,8 +120,8 @@ som_deepspec_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_deepspec_estimator
-  model: out/CARDINAL_model_deep.pkl
-  data: ./cardinal/spec_data.hdf5
+  model: CARDINAL_model_deep.pkl
+  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/spec_data_subsample.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_widewide_estimator:
@@ -143,9 +146,9 @@ som_widewide_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_widewide_estimator
-  model: out/CARDINAL_model_wide.pkl
+  model: CARDINAL_model_wide.pkl
   assignment: widedata_wide_assignment.hdf5
-  data: ./cardinal/wide_data.hdf5
+  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/wide_data_subsample.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_widespec_estimator:
@@ -170,7 +173,7 @@ som_widespec_estimator:
   thresh_val: 1.0e-05
   debug: false
   name: som_widespec_estimator
-  model: out/CARDINAL_model_wide.pkl
+  model: CARDINAL_model_wide.pkl
   assignment: specdata_wide_assignment.hdf5
   thresh_val_err: 1.0e-05
   config: null
@@ -194,14 +197,15 @@ som_pzc_stage:
   bin_edges:
   - 0.0
   - 0.35
-  - 0.65
-  - 0.85
-  - 2.0
+  - 0.54
+  - 0.73
+  - 0.99
+  - 2.29
   zbins_min: 0.0
-  zbins_max: 3.2
-  zbins_dz: 0.02
+  zbins_max: 3.0
+  zbins_dz: 0.01
   name: som_pzc_stage
-  pz_c: out/pz_c.hdf5
+  pz_c: pz_c.hdf5
   config: null
 pcchat_stage:
   output_mode: default
@@ -232,12 +236,13 @@ sompz_pzchat:
   bin_edges:
   - 0.0
   - 0.35
-  - 0.65
-  - 0.85
-  - 2.0
+  - 0.54
+  - 0.73
+  - 0.99
+  - 2.29
   zbins_min: 0.0
   zbins_max: 3.0
-  zbins_dz: 0.025
+  zbins_dz: 0.01
   name: sompz_pzchat
   config: null
 sompz_tomobin:
@@ -254,15 +259,16 @@ sompz_tomobin:
   bin_edges:
   - 0.0
   - 0.35
-  - 0.65
-  - 0.85
-  - 2.0
+  - 0.54
+  - 0.73
+  - 0.99
+  - 2.29
   zbins_min: 0.0
   zbins_max: 3.0
-  zbins_dz: 0.025
+  zbins_dz: 0.01
   name: sompz_tomobin
   wide_som_size: 1024
-  deep_som_size: 4096
+  deep_som_size: 1024
   tomo_bins_wide: tomo_bins_wide.hdf5
   config: null
 sompz_nz:
@@ -279,14 +285,15 @@ sompz_nz:
   bin_edges:
   - 0.0
   - 0.35
-  - 0.65
-  - 0.85
-  - 2.0
+  - 0.54
+  - 0.73
+  - 0.99
+  - 2.29
   zbins_min: 0.0
   zbins_max: 3.0
-  zbins_dz: 0.025
+  zbins_dz: 0.01
   name: sompz_nz
-  wide_som_size: 625
+  wide_som_size: 1024
   deep_som_size: 1024
   nz: FINAL_NZ.hdf5
   config: null

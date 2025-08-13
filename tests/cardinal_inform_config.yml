@@ -4,23 +4,25 @@ som_deep_informer_big:
   hdf5_groupname: ''
   nproc: 1
   inputs:
-  - MAG_lsst_u
-  - MAG_lsst_g
-  - MAG_lsst_r
-  - MAG_lsst_i
-  - MAG_lsst_z
-  - MAG_VISTA_Filters_at80K_forETC_J
-  - MAG_VISTA_Filters_at80K_forETC_H
-  - MAG_VISTA_Filters_at80K_forETC_Ks
+  - TRUEMAG_lsst_u
+  - TRUEMAG_lsst_g
+  - TRUEMAG_lsst_r
+  - TRUEMAG_lsst_i
+  - TRUEMAG_lsst_z
+  - TRUEMAG_lsst_y
+  - TRUEMAG_J129
+  - TRUEMAG_H158
+  - TRUEMAG_F184  
   input_errs:
-  - MAGERR_lsst_u
-  - MAGERR_lsst_g
-  - MAGERR_lsst_r
-  - MAGERR_lsst_i
-  - MAGERR_lsst_z
-  - MAGERR_VISTA_Filters_at80K_forETC_J
-  - MAGERR_VISTA_Filters_at80K_forETC_H
-  - MAGERR_VISTA_Filters_at80K_forETC_Ks  
+  - TRUEMAG_ERR_lsst_u
+  - TRUEMAG_ERR_lsst_g
+  - TRUEMAG_ERR_lsst_r
+  - TRUEMAG_ERR_lsst_i
+  - TRUEMAG_ERR_lsst_z
+  - TRUEMAG_ERR_lsst_y
+  - TRUEMAG_ERR_Roman_J129
+  - TRUEMAG_ERR_Roman_H158
+  - TRUEMAG_ERR_Roman_F184  
   zero_points:
   - 30.0
   - 30.0
@@ -29,8 +31,9 @@ som_deep_informer_big:
   - 30.0
   - 30.0
   - 30.0
-  - 30.0  
-  som_shape: [64, 64]
+  - 30.0
+  - 30.0    
+  som_shape: [32, 32]
   som_minerror: 0.01
   som_wrap: false
   som_take_log: true
@@ -39,7 +42,7 @@ som_deep_informer_big:
   thresh_val: 1.0e-05
   thresh_val_err: 1.0e-05
   name: som_deep_informer_big
-  model: out/CARDINAL_model_deep.pkl
+  model: CARDINAL_model_deep.pkl
   som_takelog: false
   config: null
 som_wide_informer_big:
@@ -74,6 +77,6 @@ som_wide_informer_big:
   thresh_val: 1.0e-05
   thresh_val_err: 1.0e-05
   name: som_wide_informer_big
-  model: out/CARDINAL_model_wide.pkl
+  model: CARDINAL_model_wide.pkl
   som_takelog: false
   config: null
