@@ -1,0 +1,255 @@
+som_deepdeep_estimator:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: &id010 0.0 
+  zbins_max: &id011 3.0 
+  zbins_dz: &id012 0.01
+  calculated_point_estimates: &id001 []
+  recompute_point_estimates: false
+  redshift_col: &id017 Z
+  inputs: &id002
+  - TRUEMAG_lsst_u
+  - TRUEMAG_lsst_g
+  - TRUEMAG_lsst_r
+  - TRUEMAG_lsst_i
+  - TRUEMAG_lsst_z
+  - TRUEMAG_lsst_y
+  - TRUEMAG_J129
+  - TRUEMAG_H158
+  - TRUEMAG_F184  
+  input_errs: &id003
+  - TRUEMAG_ERR_lsst_u
+  - TRUEMAG_ERR_lsst_g
+  - TRUEMAG_ERR_lsst_r
+  - TRUEMAG_ERR_lsst_i
+  - TRUEMAG_ERR_lsst_z
+  - TRUEMAG_ERR_lsst_y
+  - TRUEMAG_ERR_J129
+  - TRUEMAG_ERR_H158
+  - TRUEMAG_ERR_F184  
+  zero_points: &id004
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0  
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0  
+  som_shape: &id005
+  - 32
+  - 32
+  som_minerror: 0.01
+  som_wrap: &id013 false
+  som_take_log: &id014 false
+  convert_to_flux: &id015 true
+  set_threshold: true
+  thresh_val: 1.0e-05
+  debug: &id016 false
+  name: som_deepdeep_estimator
+  model: model_deep.pkl
+  assignment: deepdata_deep_assignment.hdf5
+  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.16.0/balrog_data.hdf5
+  thresh_val_err: 1.0e-05
+  config: null
+som_deepwide_estimator:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  inputs: &id006
+  - MAG_U
+  - MAG_G
+  - MAG_R
+  - MAG_I
+  - MAG_Z
+  input_errs: &id007
+  - MAGERR_U
+  - MAGERR_G
+  - MAGERR_R
+  - MAGERR_I
+  - MAGERR_Z
+  zero_points: &id008
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  - 30.0
+  som_shape: &id009
+  - 32
+  - 32
+  som_minerror: 0.005
+  som_wrap: &id018 false
+  som_take_log: &id019 false
+  convert_to_flux: &id020 true
+  set_threshold: true
+  thresh_val: 1.0e-05
+  debug: *id016
+  name: som_deepwide_estimator
+  model: model_wide.pkl
+  assignment: deepdata_wide_assignment.hdf5
+  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.16.0/balrog_data.hdf5
+  thresh_val_err: 1.0e-05
+  config: null
+som_deepspec_estimator:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  inputs: *id002
+  input_errs: *id003
+  zero_points: *id004
+  som_shape: *id005
+  som_minerror: 0.01
+  som_wrap: *id013
+  som_take_log: *id014
+  convert_to_flux: *id015
+  set_threshold: true
+  thresh_val: 1.0e-05
+  debug: *id016
+  name: som_deepspec_estimator
+  model: model_deep.pkl
+  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.16.0/spec_data_subsample.hdf5
+  thresh_val_err: 1.0e-05
+  config: null
+som_widewide_estimator:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  inputs: *id006
+  input_errs: *id007
+  zero_points: *id008
+  som_shape: *id009
+  som_minerror: 0.005
+  som_wrap: *id018
+  som_take_log: *id019
+  convert_to_flux: *id020
+  set_threshold: true
+  thresh_val: 1.0e-05
+  debug: *id016
+  name: som_widewide_estimator
+  model: model_wide.pkl
+  assignment: widedata_wide_assignment.hdf5
+  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.16.0/wide_data_subsample.hdf5
+  thresh_val_err: 1.0e-05
+  config: null
+som_widespec_estimator:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  inputs: *id006
+  input_errs: *id007
+  zero_points: *id008
+  som_shape: *id009
+  som_minerror: 0.005
+  som_wrap: *id018
+  som_take_log: *id019
+  convert_to_flux: *id020
+  set_threshold: true
+  thresh_val: 1.0e-05
+  debug: *id016
+  name: som_widespec_estimator
+  model: model_wide.pkl
+  assignment: specdata_wide_assignment.hdf5
+  thresh_val_err: 1.0e-05
+  config: null
+som_pzc_stage:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: photometry
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  deep_groupname: ''
+  bin_edges: &id021
+  - 0.0
+  - 0.35
+  - 0.54
+  - 0.73
+  - 0.99
+  - 2.35
+  name: som_pzc_stage
+  pz_c: pz_c.hdf5
+  config: null
+pcchat_stage:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: photometry
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  name: pcchat_stage
+  deep_som_size: &id022 1024
+  wide_som_size: &id023 1024
+  config: null
+sompz_pzchat:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: photometry
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  bin_edges: *id021
+  name: sompz_pzchat
+  config: null
+sompz_tomobin:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: photometry
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  bin_edges: *id021
+  name: sompz_tomobin
+  deep_som_size: *id022
+  wide_som_size: *id023
+  tomo_bins_wide: tomo_bins_wide.hdf5
+  config: null
+sompz_nz:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: photometry
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  bin_edges: *id021
+  name: sompz_nz
+  deep_som_size: *id022  
+  wide_som_size: *id023
+  nz: FINAL_NZ.hdf5
+  config: null

@@ -15,7 +15,7 @@ import matplotlib.pyplot as plt
 import h5py
 import pickle
 import gc
-
+import inspect
 
 class Pickableclassify:  # pragma: no cover
     def __init__(self, som, flux, fluxerr, inds):
@@ -365,12 +365,20 @@ def get_cell_weights_wide(data, overlap_weighted_pchat, cell_key='cell_wide', fo
 
 def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
                         key_z='Z', key_cells_wide='cell_wide_unsheared'):
+    """
+    Assign each galaxy in our spec sample to a tomographic bin according to 
+    some arbitrary bin edges such that each bin have a similar number of galaxies, 
+    and assign each wide som cell to the bin to which a plurality of its constituent 
+    spec galaxies are assigned. In practice, bin edges may be tuned to yield
+    tomographic bins with roughly equal numbers of galaxies.
+    """
     # assign gals in redshift sample to bins
     xlabels = []
     nbins = len(bin_edges) - 1
     for ii in range(nbins):
         xlabels.append(ii)
-    spec_data['tomo_bin'] = pd.cut(spec_data[key_z], bin_edges, labels=xlabels)
+    # identify tomographic bin (redshift slice) for each galaxy in spec_data
+    spec_data['tomo_bin'] = pd.cut(spec_data[key_z], bin_edges, labels=xlabels)  
 
     ncells_with_spec_data = len(np.unique(spec_data[key_cells_wide].values))
     cell_bin_assignment = np.ones(wide_som_size, dtype=int) * -1
@@ -379,6 +387,7 @@ def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
     groupby_obj_value_counts = spec_data.groupby(key_cells_wide)['tomo_bin'].value_counts()
 
     for c in cells_with_spec_data:
+        # assign the wide SOM cell to the tomographic bin to which a plurality of it's spec_data are assigned
         bin_assignment = groupby_obj_value_counts.loc[c].index[0]
         cell_bin_assignment[c] = bin_assignment
 
@@ -389,7 +398,6 @@ def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
         tomo_bins_wide[i] = np.where(cell_bin_assignment == i)[0]
 
     return tomo_bins_wide
-
 
 def tomo_bins_wide_2d(tomo_bins_wide_dict):
     tomo_bins_wide = tomo_bins_wide_dict.copy()
@@ -443,14 +451,15 @@ class SOMPZInformer(CatInformer):
                ]
 
     def run(self):
-
         # note: hdf5_groupname is a SHARED_PARAM defined in the parent class!
+        print(f'Using SOMPZInformer from file {inspect.getfile(SOMPZInformer)}')
         if self.config.hdf5_groupname:  # pragma: no cover
             data = self.get_data('input_data')[self.config.hdf5_groupname]
         else:  # pragma: no cover
             # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             data = self.get_data('input_data')
         num_inputs = len(self.config.inputs)
+        
         ngal = len(data[self.config.inputs[0]])
         print(f"{ngal} galaxies in sample")
 
@@ -562,6 +571,7 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
         """
         super().__init__(args, **kwargs)
+        print(f'Using SOMPZEstimatorX from file {inspect.getfile(SOMPZEstimator)}')
         if 'pool' in self.config.keys():
             self.pool, self.nprocess = self.config["pool"]
         else:
@@ -744,7 +754,15 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
                                                   bin_edges=self.config.bin_edges,
                                                   key_z=key,
                                                   key_cells_wide='cell_wide')
+        # tomo_bins_deep_dict = bin_assignment_spec(spec_data_for_pz,
+        #                                           deep_som_size,
+        #                                           wide_som_size,
+        #                                           bin_edges=self.config.bin_edges,
+        #                                           key_z=key,
+        #                                           key_cells_wide='cell_deep')
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
+        # tomo_bins_deep = tomo_bins_wide_2d(tomo_bins_deep_dict)
+        
         # compute number of galaxies per tomographic bin (diagnostic info)
         # cell_occupation_info = wide_data_for_pz.groupby('cell_wide')['cell_wide'].count()
         # bin_occupation_info = {'bin' + str(i) : np.sum(cell_occupation_info.loc[tomo_bins_wide_dict[i]].values) for i in range(n_bins)}
@@ -1423,6 +1441,8 @@ class SOMPZEstimatorBase(CatEstimator):
         self.model = self.open_model(**self.config)  # None
         first = True
         if self.config.hdf5_groupname:  # pragma: no cover
+            print(self.config.hdf5_groupname)
+            self.input_iterator('data')
             iter1 = self.input_iterator('data')[self.config.hdf5_groupname]
         else:
             iter1 = self.input_iterator('data')
