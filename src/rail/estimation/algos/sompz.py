@@ -422,7 +422,7 @@ class SOMPZInformer(CatInformer):
     config_options = CatInformer.config_options.copy()
     config_options.update(redshift_col=SHARED_PARAMS,
                           hdf5_groupname=SHARED_PARAMS,
-                          nproc=Param(int, 1, msg="number of processors to use"),
+                          nprocess=Param(int, 1, msg="number of processors to use"),
                           # groupname=Param(str, "photometry", msg="hdf5_groupname for ata"),
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for data"),
@@ -484,11 +484,11 @@ class SOMPZInformer(CatInformer):
         #     self.pool = None
         #     self.nprocess = 0
         #     self.config.pool = (None, 1)
-        pool = Pool(self.config.nproc)
-        nproc = self.config.nproc
-        pooltuple = (pool, nproc)
+        pool = Pool(self.config.nprocess)
+        nprocess = self.config.nprocess
+        pooltuple = (pool, nprocess)
 
-        print(f"Training SOM of shape {self.config.som_shape}...", flush=True)
+        print(f"Training SOM of shape {self.config.som_shape} with pool made of {nprocess} processes...", flush=True)
 
         som = somfuncs.NoiseSOM(sommetric, d_input, d_errs, learn_func,
                                 shape=self.config.som_shape, minError=self.config.som_minerror,
@@ -1019,7 +1019,7 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
 
 
 class SOMPZPzc(CatEstimator):
-    """Calcaulate pzc
+    """Calculate p(z|c)
     """
     name = "SOMPZPzc"
     config_options = CatEstimator.config_options.copy()
@@ -1070,7 +1070,7 @@ class SOMPZPzc(CatEstimator):
 
 
 class SOMPZPzchat(CatEstimator):
-    """Calcaulate pzchat
+    """Calculate p(z|chat)
     """
     name = "SOMPZPzchat"
     config_options = CatEstimator.config_options.copy()
@@ -1136,7 +1136,7 @@ class SOMPZPzchat(CatEstimator):
 
 
 class SOMPZPc_chat(CatEstimator):
-    """Calcaulate p(c|chat)
+    """Calculate p(c|chat)
     """
     name = "SOMPZPc_chat"
     config_options = CatEstimator.config_options.copy()
@@ -1174,7 +1174,7 @@ class SOMPZPc_chat(CatEstimator):
 
 
 class SOMPZTomobin(CatEstimator):
-    """Calcaulate tomobin
+    """Calculate tomobin
     """
     name = "SOMPZTomobin"
     config_options = CatEstimator.config_options.copy()
@@ -1232,7 +1232,7 @@ class SOMPZTomobin(CatEstimator):
 
 
 class SOMPZnz(CatEstimator):
-    """Calcaulate nz
+    """Calculate nz
     """
     name = "SOMPZnz"
     config_options = CatEstimator.config_options.copy()
@@ -1325,7 +1325,7 @@ class SOMPZEstimatorBase(CatEstimator):
                                                      "set to true if inputs are mags and to False if inputs are already fluxes"),
                           set_threshold=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
                           thresh_val=Param(float, 1.e-5, msg="threshold value for set_threshold for deep data"),
-                          debug=Param(bool, False, msg="boolean reducing dataset size for quick debuggin"))
+                          debug=Param(bool, False, msg="boolean reducing dataset size for quick debugging"))
 
     inputs = [('model', ModelHandle),
               ('data', TableHandle),]
@@ -1439,6 +1439,7 @@ class SOMPZEstimatorBase(CatEstimator):
         self._finalize_run()
 
     def estimate(self, data):
+        # print('set data', data)
         self.set_data("data", data)
         self.run()
         self.finalize()
@@ -1451,8 +1452,9 @@ class SOMPZEstimatorBase(CatEstimator):
         -------
 
         """
-        tmpdict = dict(som_size=self.som_size)
+        tmpdict = dict(som_size=self.som_size) # add som size to assignment output # likely can reconfigure such that this is not needed
         self._output_handle.finalize_write(**tmpdict)
+        # self._output_handle.finalize_write({})
 
 
 class SOMPZEstimatorWide(SOMPZEstimatorBase):
