@@ -52,9 +52,6 @@ class InformSomPZPipeline(RailPipeline):
             som_wrap=False,
         )
 
-        DS = RailStage.data_store
-        DS.__class__.allow_overwrite = True
-
         # 1: train the deep SOM
         self.som_informer_deep = SOMPZInformer.build(
             aliases=dict(input_data="input_deep_data"),
