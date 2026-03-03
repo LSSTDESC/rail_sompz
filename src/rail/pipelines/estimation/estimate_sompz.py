@@ -34,9 +34,6 @@ class EstimateSomPZPipeline(RailPipeline):
     ):
         RailPipeline.__init__(self)
 
-        DS = RailStage.data_store
-        DS.__class__.allow_overwrite = True
-
         wide_catalog_class = CatalogConfigBase.get_class(
             wide_catalog_tag, catalog_module
         )

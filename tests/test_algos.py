@@ -20,9 +20,6 @@ parquetdata = "./tests/validation_10gal.pq"
 traindata = os.path.join(RAILDIR, 'rail/examples_data/testdata/training_100gal.hdf5')
 validdata = os.path.join(RAILDIR, 'rail/examples_data/testdata/validation_10gal.hdf5')
 
-DS = RailStage.data_store
-DS.__class__.allow_overwrite = True
-
 
 @pytest.mark.parametrize(
     "ntarray",
