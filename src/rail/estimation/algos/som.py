@@ -262,7 +262,7 @@ class NoiseSOM:
         Also returns a vector of the distance^2 to each BMU.
         """
         # Break the inputs into chunks for speed
-        blocksize = 10
+        blocksize = 100
         nPts = data.shape[0]
         bmu = np.zeros(nPts, dtype=int)
         dsq = np.zeros(nPts, dtype=float)
@@ -437,10 +437,12 @@ class AsinhMetric:
         # and return the one with least distance.
         # Break the cells into bunches to avoid super-large 4d arrays
 
-        chunk = 512
         if pool is not None:
-            chunk = pool[1]
-            chunk = int(chunk)
+            chunk = int(pool[1])
+        else:
+            # When running serially (no pool), use fewer larger chunks to
+            # reduce Python function-call overhead while keeping memory bounded.
+            chunk = max(1, cells.shape[0] // 512)
         # dsq is the destination array for the results (distance-squared)
         dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
         # df is the asinh of the galaxy S/N values

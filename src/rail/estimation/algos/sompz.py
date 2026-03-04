@@ -2,14 +2,14 @@
 Port of SOMPZ
 """
 import os
-import numpy as np
-import qp
 from ceci.config import StageParameter as Param
 from rail.core.data import TableHandle, ModelHandle, QPHandle, Hdf5Handle
 from rail.estimation.estimator import CatEstimator, CatInformer
 import rail.estimation.algos.som as somfuncs
 from rail.core.common_params import SHARED_PARAMS
 from multiprocessing import Pool
+import numpy as np
+import qp
 import pandas as pd
 import matplotlib.pyplot as plt
 import h5py
@@ -46,11 +46,44 @@ def mag2flux(mag, zero_pt=30):
     val = 1 * 10 ** (exponent)
     return val
 
-
 def magerr2fluxerr(magerr, flux):
     coef = np.log(10) / -2.5
     return np.abs(coef * magerr * flux)
 
+def gaussian_rbf(weight_map, central_index, cND, map_shape, scale_length=1, max_length=0, **kwargs):
+    # fills weight map with gaussian kernel exp(-0.5 (distance / scale_length) ** 2)
+
+    w_dims = len(weight_map)
+    map_dims = len(map_shape)
+    inv_scale_length_square = scale_length ** -2.
+
+    if max_length <= 0:
+        max_length_square = np.inf
+    else:
+        max_length_square = max_length ** 2
+
+    # update all cells
+    for c in range(w_dims):
+        # convert to ND
+        np.unravel_index(c, map_shape, cND)
+
+        # get distance, including accounting for toroidal topology
+        diff2 = 0.0
+        for di in range(map_dims):
+            best_c = central_index[di]
+            ci = cND[di]
+            i_dims = map_shape[di]
+            diff = (ci - best_c)
+            while diff < 0:
+                diff += i_dims
+            while diff >= i_dims * 0.5:
+                diff -= i_dims
+            diff2 += diff * diff
+            if diff2 > max_length_square:
+                continue
+
+        if diff2 <= max_length_square:
+            weight_map[c] = np.exp(-0.5 * diff2 * inv_scale_length_square)
 
 def calculate_pcchat(deep_som_size, wide_som_size, cell_deep_assign, cell_wide_assign, overlap_weight):
     pcchat_num = np.zeros((deep_som_size, wide_som_size))
@@ -132,7 +165,7 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
                 continue
 
             central_index = np.zeros(len(deep_map_shape), dtype=int)
-            # unravel_index(c, deep_map_shape, central_index)  # fills central_index
+            # np.unravel_index(c, deep_map_shape, central_index)  # fills central_index
             cND = np.zeros(len(deep_map_shape), dtype=int)
             weight_map = np.zeros(deep_som_size)
             # gaussian_rbf(weight_map, central_index, cND, deep_map_shape, **interpolate_kwargs)  # fills weight_map
@@ -363,8 +396,8 @@ def get_cell_weights_wide(data, overlap_weighted_pchat, cell_key='cell_wide', fo
     return get_cell_weights(data, overlap_weighted_pchat, cell_key)
 
 
-def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
-                        key_z='Z', key_cells_wide='cell_wide_unsheared'):
+def define_tomo_bins_modal_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
+                                key_z='Z', key_cells_wide='cell_wide_unsheared'):
     """
     Assign each galaxy in our spec sample to a tomographic bin according to 
     some arbitrary bin edges such that each bin have a similar number of galaxies, 
@@ -372,7 +405,7 @@ def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
     spec galaxies are assigned. In practice, bin edges may be tuned to yield
     tomographic bins with roughly equal numbers of galaxies.
     """
-    # assign gals in redshift sample to bins
+    # assign gals in redshift sample to bins using arbitrary bin edges
     xlabels = []
     nbins = len(bin_edges) - 1
     for ii in range(nbins):
@@ -380,14 +413,15 @@ def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
     # identify tomographic bin (redshift slice) for each galaxy in spec_data
     spec_data['tomo_bin'] = pd.cut(spec_data[key_z], bin_edges, labels=xlabels)  
 
-    ncells_with_spec_data = len(np.unique(spec_data[key_cells_wide].values))
+    # assign the wide SOM cell to the tomographic bin to which a plurality of cell spec_data are assigned
+    # ncells_with_spec_data = len(np.unique(spec_data[key_cells_wide].values))
     cell_bin_assignment = np.ones(wide_som_size, dtype=int) * -1
     cells_with_spec_data = np.unique(spec_data[key_cells_wide].values)
 
     groupby_obj_value_counts = spec_data.groupby(key_cells_wide)['tomo_bin'].value_counts()
 
     for c in cells_with_spec_data:
-        # assign the wide SOM cell to the tomographic bin to which a plurality of it's spec_data are assigned
+        # identify the tomographic bin to which the plurality of spec_data are assigned
         bin_assignment = groupby_obj_value_counts.loc[c].index[0]
         cell_bin_assignment[c] = bin_assignment
 
@@ -398,6 +432,265 @@ def bin_assignment_spec(spec_data, deep_som_size, wide_som_size, bin_edges,
         tomo_bins_wide[i] = np.where(cell_bin_assignment == i)[0]
 
     return tomo_bins_wide
+
+def define_tomo_bins_deep(data, deep_som_shape, overlap_weighted, n_bins=5, key='Z',
+                          cell_key='cell_deep', from_val=None, # force_assignment=True,
+                          fullpzbins = np.arange(-0.005, 6.01, 0.01), interpolate_kwargs={}):
+    """Returns which bins go into which tomographic sample. We order sample by key and the add cells until we have 1 / n_bins of the sample.
+
+    Parameters
+    ----------
+    data :      Data sample of interest with deep data
+    overlap_weighted : Use overlap weights for tomo bin definition, i.e. in p(z|c)
+    n_bins :    Number of tomographic bins
+    key :       Key that we use to order cells
+    cell_key :   Which key we are grabbing. Default: cell_deep
+    force_assignment : Calculate cell assignments. If False, then will use whatever value is in the cell_key field of data. Default: True
+    from_val :  Minimum value of binning
+    interpolate_kwargs : arguments to pass in for performing interpolation between cells for mean spec redshift using a 2d gaussian of sigma scale_length out to max_length cells away. The two kwargs are: 'scale_length' and 'max_length'
+
+    Returns
+    -------
+    deep_bins : A dictionary of deep cell assignments
+
+    """
+
+    deep_som_size = np.prod(deep_som_shape)
+    cell_indices = np.arange(deep_som_size)  # this can probably be done in a smarter fashion
+    cell_assignments = np.zeros(deep_som_size, dtype=int) - 1
+
+    # get mean z of spec data
+    _deep_groups = data.groupby(cell_key)
+    spec_cells = _deep_groups.size().index.values
+    if type(key) is str:
+        #if(overlap_weighted==True): #warning suppressed
+            #print("WARNING: You are using the deprecated point-estimate Z. Overlap weighting not implemented. You're on your own now.")
+        spec_cells_z = _deep_groups.agg('mean')[key].values
+        mean_z_c = np.zeros(deep_som_size) + np.nan
+        mean_z_c[spec_cells] = spec_cells_z
+    elif type(key) is list:
+        spec_cells_pz = get_deep_histograms(key, spec_cells, overlap_weighted_pzc=overlap_weighted, bins=fullpzbins)
+        #spec_cells_z = np.array([np.sum(fullpzbins * hist) / np.sum(hist) if (np.sum(hist) > 0) else np.nan for hist in spec_cells_pz])
+        spec_cells_z = np.array([np.sum((hist / np.sum(hist)) * (fullpzbins[1:] + fullpzbins[:-1]) / 2.) if (np.sum(hist) > 0) else np.nan for hist in spec_cells_pz])
+        mean_z_c = np.zeros(deep_som_size) + np.nan
+        mean_z_c[spec_cells] = spec_cells_z
+
+    if len(spec_cells) != deep_som_size:
+        print('Warning! We have {0} deep cells, but our spec sample only occupies {1}! We are {3} {2} cells'.format(deep_som_size, len(spec_cells), deep_som_size - len(spec_cells), ['cutting out', 'interpolating'][len(interpolate_kwargs) > 0]))
+        if len(interpolate_kwargs) > 0:
+            # get which cells are missing spec
+            missing_cells = cell_indices[np.isin(cell_indices, spec_cells, invert=True)]
+            for c in missing_cells:
+                central_index = np.zeros(len(deep_som_shape), dtype=int)
+                np.unravel_index(c, deep_som_shape, central_index)
+                cND = np.zeros(len(deep_som_shape), dtype=int)
+                weight_map = np.zeros(deep_som_size)
+                gaussian_rbf(weight_map, central_index, cND, deep_som_shape, **interpolate_kwargs)
+                mean_z_c[c] = np.sum(mean_z_c[spec_cells] * weight_map[spec_cells] / weight_map[spec_cells].sum())
+
+    # get occupation of cells from your data
+    sample_cells, sample_cell_weights = get_cell_weights(data, overlap_weighted, cell_key)
+    # OK to not be overlap_weighted - will only use for occupation statistics
+    sample_occupation = np.zeros(deep_som_size)
+    sample_occupation[sample_cells] = sample_cell_weights
+    # OK to not be overlap_weighted - will only use for occupation statistics
+
+    # rank sort by mean z
+    ordering_all = np.argsort(mean_z_c)  # nan to go end of the list
+    # cut from ordering the nans
+    ordering = ordering_all[np.isfinite(mean_z_c[ordering_all])]
+    if from_val != None:
+        cells_in_bin_0 = ordering[mean_z_c[ordering] < from_val]
+        cell_assignments[cells_in_bin_0] = 0
+        ordering = ordering[mean_z_c[ordering] >= from_val]
+
+    # cumsum the occupation
+    cumsum_occupation = np.cumsum(sample_occupation[ordering])
+    # OK to not be overlap_weighted - will only use for occupation statistics
+    if cumsum_occupation[-1] < 1.:
+        print('Warning! We only have {0} of the sample in {1} cells with spec_z.'.format(cumsum_occupation[-1], len(ordering)))
+        cumsum_occupation = cumsum_occupation / cumsum_occupation[-1]
+    ordered_indices = cell_indices[ordering]
+
+    if from_val==None:
+        j=0
+    else:
+        j=1
+    # assign to groups based on percentile
+    for i in np.arange(j, n_bins, 1):
+        lower = (i-j) / (n_bins-j)
+        upper = (i + 1-j) / (n_bins-j)
+        conds = (cumsum_occupation >= lower) * (cumsum_occupation <= upper)
+        if upper==1:
+            conds = (cumsum_occupation >= lower)
+        cells_in_bin = ordered_indices[conds]
+        cell_assignments[cells_in_bin] = i
+
+    # convert into tomo_bins
+    tomo_bins = {}
+    for i in np.unique(cell_assignments):
+        tomo_bins[i] = np.where(cell_assignments == i)[0]
+    return tomo_bins
+
+
+def define_tomo_bins_deep_fast(data, deep_som_shape, overlap_weighted, n_bins=5, key='Z',
+                               cell_key='cell_deep', from_val=None,
+                               fullpzbins=np.arange(-0.005, 6.01, 0.01), interpolate_kwargs={},
+                               pz_c=None, zbins=None):
+    """Fast variant of define_tomo_bins_deep using vectorized bincounts.
+
+    This function is a drop-in replacement for define_tomo_bins_deep and keeps
+    the same output format. It can optionally use precomputed p(z|c) to avoid
+    recomputing per-cell mean redshifts.
+    """
+    # Accept either an integer SOM size or a 2D SOM shape.
+    if np.isscalar(deep_som_shape):
+        deep_som_shape_tuple = None
+        deep_som_size = int(deep_som_shape)
+    else:
+        deep_som_shape_tuple = tuple(np.asarray(deep_som_shape, dtype=int))
+        deep_som_size = int(np.prod(deep_som_shape_tuple))
+
+    cell_indices = np.arange(deep_som_size)
+    cell_assignments = np.zeros(deep_som_size, dtype=int) - 1
+
+    # Use already-assigned cells directly instead of groupby.
+    cell_ids_all = np.asarray(data[cell_key], dtype=np.int64)
+    valid_cells_mask = (cell_ids_all >= 0) & (cell_ids_all < deep_som_size)
+    cell_ids = cell_ids_all[valid_cells_mask]
+
+    # Build per-cell mean redshift.
+    mean_z_c = np.zeros(deep_som_size, dtype=float) + np.nan
+    if pz_c is not None and zbins is not None:
+        pz_c_arr = np.asarray(pz_c, dtype=float)
+        z_centers = 0.5 * (np.asarray(zbins)[1:] + np.asarray(zbins)[:-1])
+        if pz_c_arr.shape[0] != deep_som_size:
+            raise ValueError(f"pz_c has {pz_c_arr.shape[0]} cells, expected {deep_som_size}")
+        if pz_c_arr.shape[1] != z_centers.shape[0]:
+            raise ValueError(f"pz_c has {pz_c_arr.shape[1]} zbins, expected {z_centers.shape[0]}")
+        denom = np.sum(pz_c_arr, axis=1)
+        good = denom > 0
+        mean_z_c[good] = np.sum(pz_c_arr[good] * z_centers[None, :], axis=1) / denom[good]
+        spec_cells = np.where(good)[0]
+    elif isinstance(key, str):
+        zvals = np.asarray(data[key])[valid_cells_mask]
+        zsum = np.bincount(cell_ids, weights=zvals, minlength=deep_som_size)
+        zcount = np.bincount(cell_ids, minlength=deep_som_size).astype(float)
+        good = zcount > 0
+        mean_z_c[good] = zsum[good] / zcount[good]
+        spec_cells = np.where(good)[0]
+    else:
+        # Keep compatibility with non-scalar key mode by delegating.
+        return define_tomo_bins_deep(
+            data,
+            deep_som_shape,
+            overlap_weighted=overlap_weighted,
+            n_bins=n_bins,
+            key=key,
+            cell_key=cell_key,
+            from_val=from_val,
+            fullpzbins=fullpzbins,
+            interpolate_kwargs=interpolate_kwargs,
+        )
+
+    # Optionally interpolate missing deep-cell means if a 2D shape is available.
+    if len(spec_cells) != deep_som_size:
+        print('Warning! We have {0} deep cells, but our spec sample only occupies {1}! We are {3} {2} cells'.format(deep_som_size, len(spec_cells), deep_som_size - len(spec_cells), ['cutting out', 'interpolating'][len(interpolate_kwargs) > 0]))
+        if len(interpolate_kwargs) > 0 and deep_som_shape_tuple is not None:
+            missing_cells = cell_indices[np.isin(cell_indices, spec_cells, invert=True)]
+            for c in missing_cells:
+                central_index = np.zeros(len(deep_som_shape_tuple), dtype=int)
+                np.unravel_index(c, deep_som_shape_tuple, central_index)
+                cND = np.zeros(len(deep_som_shape_tuple), dtype=int)
+                weight_map = np.zeros(deep_som_size)
+                gaussian_rbf(weight_map, central_index, cND, deep_som_shape_tuple, **interpolate_kwargs)
+                denom = weight_map[spec_cells].sum()
+                if denom > 0:
+                    mean_z_c[c] = np.sum(mean_z_c[spec_cells] * weight_map[spec_cells] / denom)
+        elif len(interpolate_kwargs) > 0 and deep_som_shape_tuple is None:
+            print("Warning! interpolate_kwargs provided but deep_som_shape is scalar; skipping interpolation.")
+
+    # Fast per-cell occupation using existing cell assignments.
+    if overlap_weighted and 'overlap_weight' in data:
+        occ_weights = np.asarray(data['overlap_weight'])[valid_cells_mask]
+        occ_counts = np.bincount(cell_ids, weights=occ_weights, minlength=deep_som_size).astype(float)
+    else:
+        occ_counts = np.bincount(cell_ids, minlength=deep_som_size).astype(float)
+    total_occ = occ_counts.sum()
+    sample_occupation = occ_counts / total_occ if total_occ > 0 else occ_counts
+
+    # Rank cells by mean z and assign tomographic bins by cumulative occupation.
+    ordering_all = np.argsort(mean_z_c)
+    ordering = ordering_all[np.isfinite(mean_z_c[ordering_all])]
+    if from_val is not None:
+        cells_in_bin_0 = ordering[mean_z_c[ordering] < from_val]
+        cell_assignments[cells_in_bin_0] = 0
+        ordering = ordering[mean_z_c[ordering] >= from_val]
+
+    if ordering.size > 0:
+        cumsum_occupation = np.cumsum(sample_occupation[ordering])
+        if cumsum_occupation[-1] < 1.:
+            print('Warning! We only have {0} of the sample in {1} cells with spec_z.'.format(cumsum_occupation[-1], len(ordering)))
+            if cumsum_occupation[-1] > 0:
+                cumsum_occupation = cumsum_occupation / cumsum_occupation[-1]
+        ordered_indices = cell_indices[ordering]
+
+        j = 0 if from_val is None else 1
+        for i in np.arange(j, n_bins, 1):
+            lower = (i - j) / (n_bins - j)
+            upper = (i + 1 - j) / (n_bins - j)
+            conds = (cumsum_occupation >= lower) * (cumsum_occupation <= upper)
+            if upper == 1:
+                conds = (cumsum_occupation >= lower)
+            cells_in_bin = ordered_indices[conds]
+            cell_assignments[cells_in_bin] = i
+
+    tomo_bins = {}
+    for i in np.unique(cell_assignments):
+        tomo_bins[i] = np.where(cell_assignments == i)[0]
+    return tomo_bins
+
+
+def define_tomo_bins_wide(pc_chat, deep_bins, dfilter=0.0):
+    """Returns which wide bins go into which tomographic sample.
+
+    Parameters
+    ----------
+    deep_bins : A dictionary of deep cell assignments
+    dfilter :   Require the probability of belonging to this bin to be
+                dfilter more likely than the second most likely bin.
+                Default is to disable this with dfilter = 0.0
+
+    Returns
+    -------
+    wide_bins : Same as deep, only for wide assignments
+
+    Notes
+    -----
+    For each deep bin, calculates sum_{c \in bin b} p(c | chat)
+    chat then goes into bin b with largest value
+    """
+
+    keys = deep_bins.keys()
+    # sum_{c\in bin} p(c|chat)
+    probabilities = []
+    for key in keys:
+        cells = deep_bins[key]
+        prob = np.sum(pc_chat[cells], axis=0)
+        probabilities.append(prob)
+    probabilities = np.array(probabilities)
+
+    # dfilter
+    sorted_probabilities = np.sort(probabilities, axis=0)
+    dprob = sorted_probabilities[-1] - sorted_probabilities[-2]
+
+    # group assignments
+    # binhat = argmax_bin sum_{c\in bin} p(c|chat)
+    assignments = np.argmax(probabilities, axis=0)
+    wide_bins = {}
+    for key_i, key in enumerate(keys):
+        wide_bins[key] = np.where((assignments == key_i) * (dprob >= dfilter))[0]
+    return wide_bins
 
 def tomo_bins_wide_2d(tomo_bins_wide_dict):
     tomo_bins_wide = tomo_bins_wide_dict.copy()
@@ -692,18 +985,39 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
             # DEAL with hdf5_groupname stuff later, just assume it's in the top level for now!
             spec_data = self.get_data('spec_data')
 
+        if self.config.balrog_groupname:
+            balrog_data = self.get_data('balrog_data')[self.config.balrog_groupname]
+        else:  # pragma: no cover
+            balrog_data = self.get_data('balrog_data')
+
         if self.config.debug:
             spec_data = spec_data[:2000]
+            balrog_data = balrog_data[:2000]
+
         # spec_data = self.get_data('spec_data')
         # balrog_data = self.get_data('balrog_data')
         # wide_data = self.get_data('wide_data')
 
         cell_deep_spec_data = self.deep_assignment['spec_data'][0]
         cell_wide_spec_data = self.wide_assignment['spec_data'][0]
+        cell_deep_balrog_data = self.deep_assignment['balrog_data'][0]
+        cell_wide_balrog_data = self.wide_assignment['balrog_data'][0]
+
         # pdb.set_trace()
+        print('key', key)
+        print('spec_data[key]', spec_data[key])
+        print('cell_deep_spec_data', cell_deep_spec_data)
+        print('cell_wide_spec_data', cell_wide_spec_data)
+        print('balrog_data[key]', balrog_data[key])
+        print('cell_deep_balrog_data', cell_deep_balrog_data)
+        print('cell_wide_balrog_data', cell_wide_balrog_data)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data,
                                          'cell_wide': cell_wide_spec_data})
+
+        balrog_data_for_pz = pd.DataFrame({key: balrog_data[key],
+                                         'cell_deep': cell_deep_balrog_data,
+                                         'cell_wide': cell_wide_balrog_data})
 
         # compute p(z|c), redshift histograms of deep SOM cells
         pz_c = np.array(get_deep_histograms(None,  # this arg is not currently used in get_deep_histograms
@@ -749,18 +1063,22 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
         # assign sample to tomographic bins
         # bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # this is now a config input
         # n_bins = len(self.config.bin_edges) - 1
-        tomo_bins_wide_dict = bin_assignment_spec(spec_data_for_pz,
-                                                  deep_som_size,
-                                                  wide_som_size,
-                                                  bin_edges=self.config.bin_edges,
-                                                  key_z=key,
-                                                  key_cells_wide='cell_wide')
-        # tomo_bins_deep_dict = bin_assignment_spec(spec_data_for_pz,
+        # DES Y3-like tomographic binning
+        # tomo_bins_wide_dict = define_tomo_bins_modal_spec(spec_data_for_pz,
         #                                           deep_som_size,
         #                                           wide_som_size,
         #                                           bin_edges=self.config.bin_edges,
         #                                           key_z=key,
-        #                                           key_cells_wide='cell_deep')
+        #                                           key_cells_wide='cell_wide')
+        # Buchs-like tomographic binning
+        tomo_bins_deep_dict = define_tomo_bins_deep(balrog_data_for_pz,
+                                                    self.deep_model['som'].shape,
+                                                    overlap_weighted=False,
+                                                    n_bins=len(self.config.bin_edges)-1,
+                                                    key=key,
+                                                    cell_key='cell_deep')
+        # tomo_bins_deep = tomo_bins_wide_2d(tomo_bins_deep_dict)
+        tomo_bins_wide_dict = define_tomo_bins_wide(pc_chat, tomo_bins_deep_dict)
         tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
         # tomo_bins_deep = tomo_bins_wide_2d(tomo_bins_deep_dict)
         
@@ -1207,6 +1525,11 @@ class SOMPZTomobin(CatEstimator):
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
               ('cell_wide_spec_data', TableHandle),
+              ('balrog_data', TableHandle),
+              ('cell_deep_balrog_data', TableHandle),
+              ('cell_wide_balrog_data', TableHandle),
+              ('pz_c', Hdf5Handle),
+              ('pc_chat', Hdf5Handle),
               ]
     outputs = [('tomo_bins_wide', Hdf5Handle)]
 
@@ -1218,34 +1541,80 @@ class SOMPZTomobin(CatEstimator):
 
     def run(self):
         spec_data = self.get_data('spec_data')
+        balrog_data = self.get_data('balrog_data')
         cell_deep_spec_data = self.get_data('cell_deep_spec_data')
         cell_wide_spec_data = self.get_data('cell_wide_spec_data')
+        cell_deep_balrog_data = self.get_data('cell_deep_balrog_data')
+        cell_wide_balrog_data = self.get_data('cell_wide_balrog_data')
+        print('cell_wide_spec_data', cell_wide_spec_data['som_size'])
+        print('cell_deep_spec_data', cell_deep_spec_data['som_size'])
+        
         self.wide_som_size = int(cell_wide_spec_data['som_size'][0])
         self.deep_som_size = int(cell_deep_spec_data['som_size'][0])
         # pc_chat = self.get_data('pc_chat')['pc_chat'][:]
         key = self.config.redshift_col
+        zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
+
+        pz_c = self.get_data('pz_c')['pz_c'][:]
+        pc_chat = self.get_data('pc_chat')['pc_chat'][:]
 
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data['cells'],
                                          'cell_wide': cell_wide_spec_data['cells']})
-        tomo_bins_wide_dict = bin_assignment_spec(spec_data_for_pz,
-                                                  self.deep_som_size,
-                                                  self.wide_som_size,
-                                                  bin_edges=self.config['bin_edges'],
-                                                  key_z=key,
-                                                  key_cells_wide='cell_wide')
-        tomobinswide = tomo_bins_wide_2d(tomo_bins_wide_dict)
-        tomobinsmapping = -1 * np.ones((self.wide_som_size, 2))
-        for key in tomobinswide:
-            tomobinsmapping[tomobinswide[key][:, 0].astype(int), 0] = key
-            tomobinsmapping[tomobinswide[key][:, 0].astype(int), 1] = tomobinswide[key][:, 1]
+        balrog_data_for_pz = pd.DataFrame({key: balrog_data[key],
+                                         'cell_deep': cell_deep_balrog_data['cells'],
+                                         'cell_wide': cell_wide_balrog_data['cells']})
+        # DES Y3-like tomographic binning
+        # tomo_bins_wide_dict = define_tomo_bins_modal_spec(spec_data_for_pz,
+        #                                           self.deep_som_size,
+        #                                           self.wide_som_size,
+        #                                           bin_edges=self.config['bin_edges'],
+        #                                           key_z=key,
+        #                                           key_cells_wide='cell_wide')
+        # Buchs-like tomographic binning
+        # tomo_bins_deep_dict = define_tomo_bins_deep(balrog_data_for_pz,
+        #                                             self.deep_som_size,
+        #                                             # self.deep_model['som'].shape,
+        #                                             overlap_weighted=False,
+        #                                             n_bins=len(self.config.bin_edges)-1,
+        #                                             key=key,
+        #                                             cell_key='cell_deep')
+        tomo_bins_deep_dict = define_tomo_bins_deep_fast(
+            balrog_data_for_pz,
+            self.deep_som_size,
+            overlap_weighted=False,
+            n_bins=len(self.config.bin_edges) - 1,
+            key=key,
+            cell_key='cell_deep',
+            pz_c=pz_c,
+            zbins=zbins,
+        )
+        tomo_bins_deep = tomo_bins_wide_2d(tomo_bins_deep_dict)
+        tomo_bins_deep_mapping = -1 * np.ones((self.deep_som_size, 2))
+        for key in tomo_bins_deep:
+            tomo_bins_deep_mapping[tomo_bins_deep[key][:, 0].astype(int), 0] = key
+            tomo_bins_deep_mapping[tomo_bins_deep[key][:, 0].astype(int), 1] = tomo_bins_deep[key][:, 1]
+        
+        tomo_bins_wide_dict = define_tomo_bins_wide(pc_chat, tomo_bins_deep_dict)
+        tomo_bins_wide = tomo_bins_wide_2d(tomo_bins_wide_dict)
+        tomo_bins_mapping = -1 * np.ones((self.wide_som_size, 2))
+        for key in tomo_bins_wide:
+            tomo_bins_mapping[tomo_bins_wide[key][:, 0].astype(int), 0] = key
+            tomo_bins_mapping[tomo_bins_wide[key][:, 0].astype(int), 1] = tomo_bins_wide[key][:, 1]
+        # self.add_data('tomo_bins_deep', dict(tomo_bins_deep=tomo_bins_deep_mapping))
+        self.add_data('tomo_bins_wide', dict(tomo_bins_wide=tomo_bins_mapping))
 
-        self.add_data('tomo_bins_wide', dict(tomo_bins_wide=tomobinsmapping))
-
-    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_spec_data):
+    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_spec_data,
+                 balrog_data, cell_deep_balrog_data, cell_wide_balrog_data, 
+                 pz_c, pc_chat):
         self.set_data('spec_data', spec_data)
         self.set_data('cell_deep_spec_data', cell_deep_spec_data)
         self.set_data('cell_wide_spec_data', cell_wide_spec_data)
+        self.set_data('balrog_data', balrog_data)
+        self.set_data('cell_deep_balrog_data', cell_deep_balrog_data)
+        self.set_data('cell_wide_balrog_data', cell_wide_balrog_data)
+        self.set_data('pz_c', pz_c)
+        self.set_data('pc_chat', pc_chat)
         self.run()
         self.finalize()
 
@@ -1321,6 +1690,105 @@ class SOMPZnz(CatEstimator):
         cell_wide_wide_data = self.set_data('cell_wide_wide_data', cell_wide_wide_data)
         tomo_bins_wide = self.set_data('tomo_bins_wide', tomo_bins_wide)
         pc_chat = self.set_data('pc_chat', pc_chat)
+        self.run()
+        self.finalize()
+
+
+class SOMPZnz_fast(CatEstimator):
+    """Calculate nz using precomputed p(z|c) and p(c|chat)."""
+    name = "SOMPZnz_fast"
+    config_options = CatEstimator.config_options.copy()
+    config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
+                          redshift_col=SHARED_PARAMS,
+                          bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
+                          zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
+                          zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
+                          zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+                          )
+    # Keep interface close to SOMPZnz so it is easy to swap stages in YAML.
+    # spec_data and cell_deep_spec_data are accepted for drop-in compatibility
+    # but are not required by the fast computation.
+    inputs = [('spec_data', TableHandle),
+              ('cell_deep_spec_data', TableHandle),
+              ('cell_wide_wide_data', TableHandle),
+              ('tomo_bins_wide', Hdf5Handle),
+              ('pc_chat', Hdf5Handle),
+              ('pz_c', Hdf5Handle),
+              ]
+    outputs = [('nz', QPHandle)]
+
+    def __init__(self, args, **kwargs):
+        super().__init__(args, **kwargs)
+
+    def _parse_tomo_bins_wide(self, tomo_bins_wide_in):
+        tomo_bins_wide = {}
+        for i in np.unique(tomo_bins_wide_in[:, 0]):
+            if i < 0:
+                continue
+            inds = np.where(tomo_bins_wide_in[:, 0] == i)[0]
+            weights = tomo_bins_wide_in[inds, 1]
+            tomo_bins_wide[int(i)] = np.array([inds, weights]).T
+        return tomo_bins_wide
+
+    def run(self):
+        cell_wide_wide_data = self.get_data('cell_wide_wide_data')
+        wide_cells = np.asarray(cell_wide_wide_data['cells'], dtype=np.int64)
+        self.wide_som_size = int(cell_wide_wide_data['som_size'][0])
+
+        tomo_bins_wide_in = self.get_data('tomo_bins_wide')['tomo_bins_wide'][:]
+        tomo_bins_wide = self._parse_tomo_bins_wide(tomo_bins_wide_in)
+
+        pc_chat = np.asarray(self.get_data('pc_chat')['pc_chat'][:], dtype=float)
+        pz_c = np.asarray(self.get_data('pz_c')['pz_c'][:], dtype=float)
+        self.deep_som_size = pz_c.shape[0]
+
+        zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2.,
+                          self.config.zbins_max + self.config.zbins_dz,
+                          self.config.zbins_dz)
+        dz = np.diff(zbins)
+
+        if pc_chat.shape[0] != self.deep_som_size:
+            raise ValueError(f"pc_chat deep axis ({pc_chat.shape[0]}) != pz_c deep axis ({self.deep_som_size})")
+        if pc_chat.shape[1] != self.wide_som_size:
+            raise ValueError(f"pc_chat wide axis ({pc_chat.shape[1]}) != wide som size ({self.wide_som_size})")
+
+        # p(chat | sample): fraction of sample in each wide SOM cell.
+        chat_counts = np.bincount(wide_cells, minlength=self.wide_som_size).astype(float)
+        if chat_counts.sum() == 0:
+            raise ValueError("No wide-cell assignments found; cannot compute nz.")
+        p_chat_sample = chat_counts / chat_counts.sum()
+
+        # Combine p(chat|sample), tomo-bin weights, and p(c|chat), then marginalize
+        # deep-cell histograms p(z|c) to get n(z) per tomo bin.
+        bin_keys = sorted(tomo_bins_wide.keys())
+        nz_rows = []
+        for bin_key in bin_keys:
+            cells_use = tomo_bins_wide[bin_key][:, 0].astype(np.int64)
+            cells_binweights = tomo_bins_wide[bin_key][:, 1].astype(float)
+
+            p_chat_bin = np.zeros(self.wide_som_size, dtype=float)
+            p_chat_bin[cells_use] = p_chat_sample[cells_use] * cells_binweights
+
+            p_c_bin = np.sum(pc_chat * p_chat_bin[None, :], axis=1)
+            hist = np.sum(pz_c * p_c_bin[:, None], axis=0)
+
+            norm = np.sum(hist * dz)
+            if norm > 0:
+                hist = hist / norm
+            nz_rows.append(hist)
+
+        nz = np.array(nz_rows)
+        self.bincents = 0.5 * (zbins[1:] + zbins[:-1])
+        tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
+        self.add_data('nz', tomo_ens)
+
+    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_wide_data, tomo_bins_wide, pc_chat, pz_c):
+        self.set_data('spec_data', spec_data)
+        self.set_data('cell_deep_spec_data', cell_deep_spec_data)
+        self.set_data('cell_wide_wide_data', cell_wide_wide_data)
+        self.set_data('tomo_bins_wide', tomo_bins_wide)
+        self.set_data('pc_chat', pc_chat)
+        self.set_data('pz_c', pz_c)
         self.run()
         self.finalize()
 
