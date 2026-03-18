@@ -451,6 +451,7 @@ class AsinhMetric:
 
         # w is the weight for asinh vs geometric mean metrics
         # w: see Eqn A5 of Sanchez+2020
+        vf = np.clip(vf, a_min=None, a_max=350)
         w = np.minimum(np.exp(2 * (vf - 4)), 1000.)
         if np.any(np.isinf(w)):  # pragma: no cover
             #pdb.set_trace()
