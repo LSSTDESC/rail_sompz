@@ -1,5 +1,5 @@
 from rail.core.stage import RailStage
-from rail.core.data import Hdf5Handle
+from rail.core.data import Hdf5Handle, DataStore
 from rail.utils.catalog_utils import CatalogConfigBase
 
 from rail.estimation.algos.sompz import (
@@ -63,9 +63,7 @@ zbins_dz_tomo = 0.025
 def test_informer_deep(get_data):
     assert get_data == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_informer_deep = SOMPZInformer.make_stage(
         name="test_informer_deep",
@@ -83,9 +81,7 @@ def test_informer_deep(get_data):
 def test_informer_wide(get_data):
     assert get_data == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_informer_wide = SOMPZInformer.make_stage(
         name="test_informer_wide",
@@ -104,9 +100,7 @@ def test_deepdeep_estimator(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_deepdeep_estimator = SOMPZEstimatorDeep.make_stage(
         name="test_deepdeep_estimator",
@@ -128,9 +122,7 @@ def test_deepwide_estimator(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_deepwide_estimator = SOMPZEstimatorWide.make_stage(
         name="test_deepwide_estimator",
@@ -152,9 +144,7 @@ def test_pz_c(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_pzc = SOMPZPzc.make_stage(
         name="test_pzc",
@@ -184,9 +174,7 @@ def test_pc_chat(get_intermediates):
 
     assert get_intermediates == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_pcchat = SOMPZPc_chat.make_stage(
         name="test_pcchat",
@@ -211,9 +199,7 @@ def test_pz_chat(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_pzchat = SOMPZPzchat.make_stage(
         name="test_pzchat",
@@ -258,9 +244,7 @@ def test_tomo_bin(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_tomobin = SOMPZTomobin.make_stage(
         name="test_tomobin",
@@ -299,9 +283,7 @@ def test_nz(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = RailStage.data_store
-    DS.__class__.allow_overwrite = True
-    DS.clear()
+    DS = DataStore()
 
     som_nz = SOMPZnz.make_stage(
         name="test_nz",
