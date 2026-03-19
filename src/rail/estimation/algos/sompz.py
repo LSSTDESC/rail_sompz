@@ -39,7 +39,6 @@ for band in def_bands:
     default_err_names.append(f"mag_err_{band}_lsst")
     default_zero_points.append(30.)
 
-
 def mag2flux(mag, zero_pt=30):
     # zeropoint: M = 30 <=> f = 1
     exponent = (mag - zero_pt) / (-2.5)
@@ -135,8 +134,6 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
             if type(key) is str:
                 z = df[key].values
                 if overlap_weighted_pzc:  # pragma: no cover
-                    # print("WARNING: You are using a deprecated point estimate Z. No overlap weighting enabled.
-                    # You're on your own now.")#suppress
                     weights = df[overlap_key].values
                 else:
                     weights = np.ones(len(z))
@@ -146,7 +143,6 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
             elif type(key) is list:  # pragma: no cover
                 # use full p(z)
                 assert (bins is not None)
-                # ##histogram_from_fullpz CURRENTLY UNDEFINED!
                 hist = histogram_from_fullpz(df, key, overlap_weighted=overlap_weighted_pzc, bin_edges=bins)
             hists.append(hist)
         except KeyError as e:
@@ -263,7 +259,7 @@ def histogram_from_fullpz(df, key, overlap_weighted, bin_edges, full_pz_end=6.00
     area = area.reshape(area.shape[0], 1)
     single_cell_hists = single_cell_hists / area
 
-    # response weight normalized p(z)
+    # weight normalized p(z) by shear response
     single_cell_hists = np.multiply(overlap_weights, single_cell_hists.transpose()).transpose()
 
     # sum individual galaxy p(z) to single cell p(z)
@@ -348,7 +344,6 @@ def redshift_distributions_wide(data,
             hists.append(hist)
         hists = np.array(hists)
         return hists
-
 
 def get_cell_weights(data, overlap_weighted, key):
     """Given data, get cell weights and indices
@@ -463,8 +458,6 @@ def define_tomo_bins_deep(data, deep_som_shape, overlap_weighted, n_bins=5, key=
     _deep_groups = data.groupby(cell_key)
     spec_cells = _deep_groups.size().index.values
     if type(key) is str:
-        #if(overlap_weighted==True): #warning suppressed
-            #print("WARNING: You are using the deprecated point-estimate Z. Overlap weighting not implemented. You're on your own now.")
         spec_cells_z = _deep_groups.agg('mean')[key].values
         mean_z_c = np.zeros(deep_som_size) + np.nan
         mean_z_c[spec_cells] = spec_cells_z
@@ -493,7 +486,6 @@ def define_tomo_bins_deep(data, deep_som_shape, overlap_weighted, n_bins=5, key=
     # OK to not be overlap_weighted - will only use for occupation statistics
     sample_occupation = np.zeros(deep_som_size)
     sample_occupation[sample_cells] = sample_cell_weights
-    # OK to not be overlap_weighted - will only use for occupation statistics
 
     # rank sort by mean z
     ordering_all = np.argsort(mean_z_c)  # nan to go end of the list
@@ -692,6 +684,55 @@ def define_tomo_bins_wide(pc_chat, deep_bins, dfilter=0.0):
         wide_bins[key] = np.where((assignments == key_i) * (dprob >= dfilter))[0]
     return wide_bins
 
+def nz_bin_conditioned(wide_data, spec_data, overlap_weighted_pchat, overlap_weighted_pzc, tomo_cells, zbins, pcchat,
+                       cell_wide_key='cell_wide', zkey='Z'):
+    f"""Function to obtain p(z|bin,s): the redshift distribution of a tomographic bin
+        including the tomographic selection effect in p(z|chat). 
+        The truth: n(z| s-hat) = sum_{{c,c-hat}} p(z|c, chat, s-hat, ) p(c | chat, s-hat) p(c-hat)
+        is approximated  here with : n(z| s-hat) = sum_{{c,c-hat}} p(z|c, bhat, s-hat, ) p(c | chat, s-hat) p(c-hat)
+        which is closer to the truth than vanilla SOMPZ: n(z| s-hat) = sum_{{c,c-hat}} p(z|c, s-hat, ) p(c | chat, s-hat) p(c-hat)
+
+    Implementation note:
+    This is going to sneak the bin conditionalization into the overlap weights, and then divide them back out.
+    This is a simple way of achieving to not completely lose cells c that contribute to p(c|chat) but don't have a z in b.
+
+        Parameters
+        ----------
+        wide_data : Wide field data, pandas DataFrame
+        spec_data : Spectroscopic calibration data, pandas DataFrame
+        overlap_weighted_pchat : If True, weight chat by the sum of overlap weights, not number of galaxies, in wide field data.
+        tomo_cells : Which cells belong to this tomographic bin. First column is
+                     cell id, second column is an additional reweighting of galaxies in that cell.
+        zbins : redshift bin edges.
+        cell_wide_key : key for wide SOM cell id information in spec_data.
+        cell_deep_key : key for wide SOM cell id information in spec_data.
+    """
+
+    print('Ngal full redshift sample:', len(spec_data))
+    bl = len(spec_data[spec_data['cell_wide_unsheared'].isin(tomo_cells[:, 0])])
+    print('Ngal subset of redshift sample in bin:', bl)
+
+    f = 1.e9  # how much more we weight the redshift of a galaxy that's in the right bin
+
+    stored_overlap_weight = spec_data['overlap_weight'].copy()  # save for later
+
+    if not overlap_weighted_pzc: # we must set values for overlap_weight, even if the user doesn't want overlap weighting
+        spec_data['overlap_weight'] = np.ones(len(spec_data))
+
+    spec_data.loc[spec_data['cell_wide_unsheared'].isin(tomo_cells[:, 0]), 'overlap_weight'] *= f
+
+    nz = redshift_distributions_wide(data=wide_data, deep_data=spec_data, 
+                                     overlap_weighted_pchat=overlap_weighted_pchat,
+                                     overlap_weighted_pzc=True, # hard-coded here
+                                     bins=zbins, pcchat=pcchat, 
+                                     tomo_bins={"mybin": tomo_cells}, key=zkey,
+                                     force_assignment=False, 
+                                     cell_key=cell_wide_key)
+
+    spec_data['overlap_weight'] = stored_overlap_weight.copy()  # open jar
+
+    return nz[0]
+
 def tomo_bins_wide_2d(tomo_bins_wide_dict):
     tomo_bins_wide = tomo_bins_wide_dict.copy()
     for k in tomo_bins_wide:
@@ -700,21 +741,6 @@ def tomo_bins_wide_2d(tomo_bins_wide_dict):
         renorm = 1. / np.average(tomo_bins_wide[k][:, 1])
         tomo_bins_wide[k][:, 1] *= renorm  # renormalize so the mean weight is 1; important for bin conditioning
     return tomo_bins_wide
-
-
-def plot_nz(hists, zbins, outfile, xlimits=(0, 2), ylimits=(0, 3.25)):  # pragma: no cover
-    plt.figure(figsize=(16., 9.))
-    for i in range(len(hists)):
-        plt.plot((zbins[1:] + zbins[:-1]) / 2., hists[i], label='bin ' + str(i))
-    plt.xlim(xlimits)
-    plt.ylim(ylimits)
-    plt.xlabel(r'$z$')
-    plt.ylabel(r'$p(z)$')
-    plt.legend()
-    plt.title('n(z)')
-    plt.savefig(outfile)
-    plt.close()
-
 
 class SOMPZInformer(CatInformer):
     """Inform stage for SOMPZEstimator
@@ -744,9 +770,7 @@ class SOMPZInformer(CatInformer):
                ]
 
     def run(self):
-        # note: hdf5_groupname is a SHARED_PARAM defined in the parent class!
-        print(f'Using SOMPZInformer from file {inspect.getfile(SOMPZInformer)}')
-        # print(self.config.hdf5_groupname)
+        # print(f'Using SOMPZInformer from file {inspect.getfile(SOMPZInformer)}')
         if self.config.hdf5_groupname:  # pragma: no cover
             data = self.get_data('input_data')[self.config.hdf5_groupname]
         else:  # pragma: no cover
@@ -769,7 +793,7 @@ class SOMPZInformer(CatInformer):
                 d_input[:, i] = data[col]
                 d_errs[:, i] = data[errcol]
 
-        # put a temporary threshold bit in. TODO fix this up later...
+        # for each feature, set values below a threshold to a value set by the config
         if self.config.set_threshold:
             for i in range(num_inputs):
                 mask = (d_input[:, i] < self.config.thresh_val)
@@ -843,6 +867,9 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
                           thresh_val_deep=Param(float, 1.e-5, msg="threshold value for set_threshold for deep data"),
                           set_threshold_wide=Param(bool, False, msg="flag for whether to replace values below a threshold with a set number"),
                           thresh_val_wide=Param(float, 1.e-5, msg="threshold value for set_threshold for wide data"),
+                          overlap_weighted_pchat=Param(bool, False, msg="if True, use overlap_weight for p(chat)"),
+                          overlap_weighted_pzc=Param(bool, False, msg="if True, use overlap_weight for p(z|c)"),
+                          overlap_weighted=Param(bool, False, msg="if True, use overlap_weight when defining tomographic bins"),
                           debug=Param(bool, False, msg="boolean reducing dataset size for quick debuggin"))
 
     inputs = [('deep_model', ModelHandle),
@@ -865,7 +892,7 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
         """
         super().__init__(args, **kwargs)
-        print(f'Using SOMPZEstimatorX from file {inspect.getfile(SOMPZEstimator)}')
+        print(f'Using SOMPZEstimator from file {inspect.getfile(SOMPZEstimator)}')
         if 'pool' in self.config.keys():
             self.pool, self.nprocess = self.config["pool"]
         else:
@@ -925,9 +952,7 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
         elif somstr == 'wide':
             som_dim = self.config.som_shape_wide[0]
 
-        # output_path = './'  # TODO make kwarg
         nTrain = flux.shape[0]
-        # som_weights = np.load(infile_som, allow_pickle=True)
         if somstr == "deep":
             som_weights = self.deep_model['som'].weights
         elif somstr == "wide":
@@ -967,8 +992,7 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
                           self.config.zbins_max + self.config.zbins_dz,
                           self.config.zbins_dz)
         self.bincents = 0.5 * (zbins[1:] + zbins[:-1])
-        # TODO: improve file i/o
-        # output_path = './'
+        
         deep_som_size = np.product(self.deep_model['som'].shape)
         wide_som_size = np.product(self.wide_model['som'].shape)
 
@@ -989,6 +1013,10 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
             balrog_data = self.get_data('balrog_data')[self.config.balrog_groupname]
         else:  # pragma: no cover
             balrog_data = self.get_data('balrog_data')
+        if self.config.wide_groupname:
+            wide_data = self.get_data('wide_data')[self.config.wide_groupname]
+        else:  # pragma: no cover
+            wide_data = self.get_data('wide_data')
 
         if self.config.debug:
             spec_data = spec_data[:2000]
@@ -1003,30 +1031,26 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
         cell_deep_balrog_data = self.deep_assignment['balrog_data'][0]
         cell_wide_balrog_data = self.wide_assignment['balrog_data'][0]
 
-        # pdb.set_trace()
-        print('key', key)
-        print('spec_data[key]', spec_data[key])
-        print('cell_deep_spec_data', cell_deep_spec_data)
-        print('cell_wide_spec_data', cell_wide_spec_data)
-        print('balrog_data[key]', balrog_data[key])
-        print('cell_deep_balrog_data', cell_deep_balrog_data)
-        print('cell_wide_balrog_data', cell_wide_balrog_data)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data,
                                          'cell_wide': cell_wide_spec_data})
+        if 'overlap_weight' in spec_data.keys(): # : dtype.names:
+            spec_data_for_pz['overlap_weight'] = spec_data['overlap_weight']
 
         balrog_data_for_pz = pd.DataFrame({key: balrog_data[key],
                                          'cell_deep': cell_deep_balrog_data,
                                          'cell_wide': cell_wide_balrog_data})
+        if 'overlap_weight' in balrog_data.keys():
+            balrog_data_for_pz['overlap_weight'] = balrog_data['overlap_weight']
 
-        # compute p(z|c), redshift histograms of deep SOM cells
+        # compute p(z|c, etc.), redshift histograms of deep SOM cells
         pz_c = np.array(get_deep_histograms(None,  # this arg is not currently used in get_deep_histograms
                                             spec_data_for_pz,
                                             key=key,
                                             cells=all_deep_cells,
-                                            overlap_weighted_pzc=False,
+                                            overlap_weighted_pzc=self.config.overlap_weighted_pzc,
                                             bins=zbins))
-        # compute p(c|chat,etc.), the deep-wide transfer function
+        # compute p(c|chat, etc.), the deep-wide transfer function
         pc_chat = calculate_pcchat(deep_som_size,
                                    wide_som_size,
                                    self.deep_assignment['balrog_data'][0],  # balrog_data['cell_deep'],#.values,
@@ -1034,14 +1058,13 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
                                    np.ones(len(self.deep_assignment['balrog_data'][0])))
         pcchatdict = dict(pc_chat=pc_chat)
         self.add_data('pc_chat', pcchatdict)
-        # use to write pc_chat out to file, leave in temporarily for cross checks
-        # outfile = os.path.join(output_path, 'pcchat.npy')
-        # np.savez(outfile, pc_chat=pc_chat)
-
+        
         # compute p(chat), occupation in wide SOM cells
         all_wide_cells = np.arange(wide_som_size)
         cell_wide_wide_data = self.wide_assignment['wide_data'][0]
         wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data})
+        if 'overlap_weight' in wide_data.keys():
+            wide_data_for_pz['overlap_weight'] = wide_data['overlap_weight']
 
         # compute p(z|chat) \propto sum_c p(z|c) p(c|chat)
         pz_chat = np.array(histogram(wide_data_for_pz,
@@ -1051,18 +1074,13 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
                                      cells=all_wide_cells,
                                      cell_weights=np.ones(len(all_wide_cells)),
                                      deep_som_size=deep_som_size,
-                                     overlap_weighted_pzc=False,
+                                     overlap_weighted_pzc=self.config.overlap_weighted_pzc,
                                      bins=zbins,
                                      individual_chat=True))
-        # note: used to write out pz_chat to np, leave in temporarily for cross-checks
-        # outfile = os.path.join(output_path, 'pzchat.npy')
-        # np.savez(outfile, pz_chat=pz_chat)
         pzchatdict = dict(pz_chat=pz_chat)
         self.add_data('pz_chat', pzchatdict)
 
         # assign sample to tomographic bins
-        # bin_edges = [0.0, 0.405, 0.665, 0.96, 2.0] # this is now a config input
-        # n_bins = len(self.config.bin_edges) - 1
         # DES Y3-like tomographic binning
         # tomo_bins_wide_dict = define_tomo_bins_modal_spec(spec_data_for_pz,
         #                                           deep_som_size,
@@ -1070,10 +1088,10 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
         #                                           bin_edges=self.config.bin_edges,
         #                                           key_z=key,
         #                                           key_cells_wide='cell_wide')
-        # Buchs-like tomographic binning
+        # BuchsDavis19-like tomographic binning
         tomo_bins_deep_dict = define_tomo_bins_deep(balrog_data_for_pz,
                                                     self.deep_model['som'].shape,
-                                                    overlap_weighted=False,
+                                                    overlap_weighted=self.config.overlap_weighted,
                                                     n_bins=len(self.config.bin_edges)-1,
                                                     key=key,
                                                     cell_key='cell_deep')
@@ -1090,8 +1108,8 @@ class SOMPZEstimator(CatEstimator):  # pragma: no cover
         # calculate n(z)
         nz = redshift_distributions_wide(data=wide_data_for_pz,
                                          deep_data=spec_data_for_pz,
-                                         overlap_weighted_pchat=False,
-                                         overlap_weighted_pzc=False,
+                                         overlap_weighted_pchat=self.config.overlap_weighted_pchat,
+                                         overlap_weighted_pzc=self.config.overlap_weighted_pzc,
                                          bins=zbins,
                                          deep_som_size=deep_som_size,
                                          pcchat=pc_chat,
@@ -1367,6 +1385,7 @@ class SOMPZPzc(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+                          overlap_weighted_pzc=Param(bool, False, msg="if True, use overlap_weight for p(z|c)"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),]
@@ -1389,12 +1408,14 @@ class SOMPZPzc(CatEstimator):
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data['cells']})
+        if 'overlap_weight' in spec_data.keys(): # dtype.names:
+            spec_data_for_pz['overlap_weight'] = spec_data['overlap_weight']
         all_deep_cells = np.arange(self.deep_som_size)
         pz_c = np.array(get_deep_histograms(None,  # this arg is not currently used in get_deep_histograms
                                             spec_data_for_pz,
                                             key=key,
                                             cells=all_deep_cells,
-                                            overlap_weighted_pzc=False,
+                                            overlap_weighted_pzc=self.config.overlap_weighted_pzc,
                                             bins=zbins))
         pzcdict = dict(pz_c=pz_c)
         self.add_data('pz_c', pzcdict)
@@ -1417,6 +1438,7 @@ class SOMPZPzchat(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+                          overlap_weighted_pzc=Param(bool, False, msg="if True, use overlap_weight for p(z|c)"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
@@ -1443,6 +1465,8 @@ class SOMPZPzchat(CatEstimator):
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data['cells']})
+        if 'overlap_weight' in spec_data.keys(): # dtype.names:
+            spec_data_for_pz['overlap_weight'] = spec_data['overlap_weight']
 
         wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data['cells']})
 
@@ -1456,7 +1480,7 @@ class SOMPZPzchat(CatEstimator):
                                      cells=all_wide_cells,
                                      cell_weights=np.ones(len(all_wide_cells)),
                                      deep_som_size=self.deep_som_size,
-                                     overlap_weighted_pzc=False,
+                                     overlap_weighted_pzc=self.config.overlap_weighted_pzc,
                                      bins=zbins,
                                      individual_chat=True))
         pzchatdict = dict(pz_chat=pz_chat)
@@ -1521,6 +1545,7 @@ class SOMPZTomobin(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+                          overlap_weighted=Param(bool, False, msg="if True, use overlap_weight when defining tomographic bins"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
@@ -1546,8 +1571,8 @@ class SOMPZTomobin(CatEstimator):
         cell_wide_spec_data = self.get_data('cell_wide_spec_data')
         cell_deep_balrog_data = self.get_data('cell_deep_balrog_data')
         cell_wide_balrog_data = self.get_data('cell_wide_balrog_data')
-        print('cell_wide_spec_data', cell_wide_spec_data['som_size'])
-        print('cell_deep_spec_data', cell_deep_spec_data['som_size'])
+        # print('cell_wide_spec_data', cell_wide_spec_data['som_size'])
+        # print('cell_deep_spec_data', cell_deep_spec_data['som_size'])
         
         self.wide_som_size = int(cell_wide_spec_data['som_size'][0])
         self.deep_som_size = int(cell_deep_spec_data['som_size'][0])
@@ -1564,6 +1589,8 @@ class SOMPZTomobin(CatEstimator):
         balrog_data_for_pz = pd.DataFrame({key: balrog_data[key],
                                          'cell_deep': cell_deep_balrog_data['cells'],
                                          'cell_wide': cell_wide_balrog_data['cells']})
+        if 'overlap_weight' in balrog_data.keys(): # dtype.names:
+            balrog_data_for_pz['overlap_weight'] = balrog_data['overlap_weight']
         # DES Y3-like tomographic binning
         # tomo_bins_wide_dict = define_tomo_bins_modal_spec(spec_data_for_pz,
         #                                           self.deep_som_size,
@@ -1575,14 +1602,14 @@ class SOMPZTomobin(CatEstimator):
         # tomo_bins_deep_dict = define_tomo_bins_deep(balrog_data_for_pz,
         #                                             self.deep_som_size,
         #                                             # self.deep_model['som'].shape,
-        #                                             overlap_weighted=False,
+        #                                             overlap_weighted=self.config.overlap_weighted,
         #                                             n_bins=len(self.config.bin_edges)-1,
         #                                             key=key,
         #                                             cell_key='cell_deep')
         tomo_bins_deep_dict = define_tomo_bins_deep_fast(
             balrog_data_for_pz,
             self.deep_som_size,
-            overlap_weighted=False,
+            overlap_weighted=self.config.overlap_weighted,
             n_bins=len(self.config.bin_edges) - 1,
             key=key,
             cell_key='cell_deep',
@@ -1630,6 +1657,9 @@ class SOMPZnz(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+                          overlap_weighted_pchat=Param(bool, False, msg="if True, use overlap_weight for p(chat)"),
+                          overlap_weighted_pzc=Param(bool, False, msg="if True, use overlap_weight for p(z|c)"),
+                          use_bin_conditioning=Param(bool, False, msg="if True, make bin-conditioned n(z)"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
@@ -1664,22 +1694,37 @@ class SOMPZnz(CatEstimator):
         zbins = np.arange(self.config.zbins_min - self.config.zbins_dz / 2., self.config.zbins_max + self.config.zbins_dz, self.config.zbins_dz)
         spec_data_for_pz = pd.DataFrame({key: spec_data[key],
                                          'cell_deep': cell_deep_spec_data['cells']})
+        if 'overlap_weight' in spec_data.keys(): # dtype.names:
+            spec_data_for_pz['overlap_weight'] = spec_data['overlap_weight']
 
         wide_data_for_pz = pd.DataFrame({'cell_wide': cell_wide_wide_data['cells']})
+        if 'overlap_weight' in cell_wide_wide_data.keys(): # dtype.names:
+            wide_data_for_pz['overlap_weight'] = cell_wide_wide_data['overlap_weight']
 
         all_wide_cells = np.arange(self.wide_som_size)
         all_deep_cells = np.arange(self.deep_som_size)
-        nz = redshift_distributions_wide(data=wide_data_for_pz,
-                                         deep_data=spec_data_for_pz,
-                                         overlap_weighted_pchat=False,
-                                         overlap_weighted_pzc=False,
-                                         bins=zbins,
-                                         deep_som_size=self.deep_som_size,
-                                         pcchat=pc_chat,
-                                         tomo_bins=tomo_bins_wide,
-                                         key=key,
-                                         force_assignment=False,
-                                         cell_key='cell_wide')
+        if self.config.use_bin_conditioning:
+            nz = np.array([nz_bin_conditioned(wide_data_for_pz, 
+                                              spec_data_for_pz, 
+                                              overlap_weighted_pchat=True, # intentionally hard-coded here
+                                              overlap_weighted_pzc=True, # intentionally hard-coded here
+                                              tomo_cells=tomo_bins_wide[i], 
+                                              zbins=zbins, 
+                                              pcchat = pc_chat, 
+                                              cell_wide_key='cell_wide', 
+                                              zkey=key) for i in range(len(tomo_bins_wide))])
+        else:
+            nz = redshift_distributions_wide(data=wide_data_for_pz,
+                                             deep_data=spec_data_for_pz,
+                                             overlap_weighted_pchat=self.config.overlap_weighted_pchat,
+                                             overlap_weighted_pzc=self.config.overlap_weighted_pzc,
+                                             bins=zbins,
+                                             deep_som_size=self.deep_som_size,
+                                             pcchat=pc_chat,
+                                             tomo_bins=tomo_bins_wide,
+                                             key=key,
+                                             force_assignment=False,
+                                             cell_key='cell_wide')
         self.bincents = 0.5 * (zbins[1:] + zbins[:-1])
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
@@ -1704,13 +1749,16 @@ class SOMPZnz_fast(CatEstimator):
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+                          overlap_weighted_pchat=Param(bool, False, msg="if True, use overlap_weight for p(chat)"),
+                          overlap_weighted_pzc=Param(bool, False, msg="expected overlap weighting used to build input p(z|c)"),
                           )
-    # Keep interface close to SOMPZnz so it is easy to swap stages in YAML.
+    # Keep interface close to SOMPZnz so it is easy to swap stages in YAML
     # spec_data and cell_deep_spec_data are accepted for drop-in compatibility
-    # but are not required by the fast computation.
+    # but are not required here
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
               ('cell_wide_wide_data', TableHandle),
+              ('wide_data', TableHandle),
               ('tomo_bins_wide', Hdf5Handle),
               ('pc_chat', Hdf5Handle),
               ('pz_c', Hdf5Handle),
@@ -1753,7 +1801,26 @@ class SOMPZnz_fast(CatEstimator):
             raise ValueError(f"pc_chat wide axis ({pc_chat.shape[1]}) != wide som size ({self.wide_som_size})")
 
         # p(chat | sample): fraction of sample in each wide SOM cell.
-        chat_counts = np.bincount(wide_cells, minlength=self.wide_som_size).astype(float)
+        if self.config.overlap_weighted_pchat != self.config.overlap_weighted_pzc:
+            raise ValueError(
+                "Inconsistent overlap-weighting config in SOMPZnz_fast: "
+                f"overlap_weighted_pchat={self.config.overlap_weighted_pchat} "
+                f"!= overlap_weighted_pzc={self.config.overlap_weighted_pzc}. "
+                "The current implementation requires overlap_weighted_pchat and overlap_weighted_pzc to be the same here."
+            )
+
+        if self.config.overlap_weighted_pchat:
+            wide_data = self.get_data('wide_data')
+            if 'overlap_weight' not in wide_data.keys(): # dtype.names:
+                raise ValueError("overlap_weighted_pchat=True, but overlap_weight is missing from wide_data.")
+            overlap_weight = np.asarray(wide_data['overlap_weight'], dtype=float)
+            if overlap_weight.shape[0] != wide_cells.shape[0]:
+                raise ValueError(
+                    f"wide_data length ({overlap_weight.shape[0]}) must match cell_wide_wide_data length ({wide_cells.shape[0]})."
+                )
+            chat_counts = np.bincount(wide_cells, weights=overlap_weight, minlength=self.wide_som_size).astype(float)
+        else:
+            chat_counts = np.bincount(wide_cells, minlength=self.wide_som_size).astype(float)
         if chat_counts.sum() == 0:
             raise ValueError("No wide-cell assignments found; cannot compute nz.")
         p_chat_sample = chat_counts / chat_counts.sum()
@@ -1782,10 +1849,11 @@ class SOMPZnz_fast(CatEstimator):
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
 
-    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_wide_data, tomo_bins_wide, pc_chat, pz_c):
+    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_wide_data, wide_data, tomo_bins_wide, pc_chat, pz_c):
         self.set_data('spec_data', spec_data)
         self.set_data('cell_deep_spec_data', cell_deep_spec_data)
         self.set_data('cell_wide_wide_data', cell_wide_wide_data)
+        self.set_data('wide_data', wide_data)
         self.set_data('tomo_bins_wide', tomo_bins_wide)
         self.set_data('pc_chat', pc_chat)
         self.set_data('pz_c', pz_c)
@@ -1835,9 +1903,8 @@ class SOMPZEstimatorBase(CatEstimator):
         s0 = int(self.config.som_shape[0])
         s1 = int(self.config.som_shape[1])
         self.som_size = np.array([int(s0 * s1)])
-        # output_path = './'  # TODO make kwarg
+
         nTrain = flux.shape[0]
-        # som_weights = np.load(infile_som, allow_pickle=True)
         som_weights = self.model['som'].weights
         hh = somfuncs.hFunc(nTrain, sigma=(30, 1))
         metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
