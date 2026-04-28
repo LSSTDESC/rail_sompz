@@ -2,7 +2,7 @@ som_deep_informer_big:
   output_mode: default
   redshift_col: Z
   hdf5_groupname: ''
-  nproc: 1
+  nprocess: 32
   inputs:
   - TRUEMAG_lsst_u
   - TRUEMAG_lsst_g
@@ -20,36 +20,35 @@ som_deep_informer_big:
   - TRUEMAG_ERR_lsst_i
   - TRUEMAG_ERR_lsst_z
   - TRUEMAG_ERR_lsst_y
-  - TRUEMAG_ERR_Roman_J129
-  - TRUEMAG_ERR_Roman_H158
-  - TRUEMAG_ERR_Roman_F184  
+  - TRUEMAG_ERR_J129
+  - TRUEMAG_ERR_H158
+  - TRUEMAG_ERR_F184  
   zero_points:
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0    
-  som_shape: [32, 32]
-  som_minerror: 0.01
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30    
+  som_shape: [128, 128]
+  som_minerror: 0.001
   som_wrap: false
-  som_take_log: true
+  som_take_log: false
   convert_to_flux: true
   set_threshold: true
   thresh_val: 1.0e-05
   thresh_val_err: 1.0e-05
   name: som_deep_informer_big
-  model: CARDINAL_model_deep.pkl
-  som_takelog: false
+  model: model_deep.pkl
   config: null
 som_wide_informer_big:
   output_mode: default
   redshift_col: Z
   hdf5_groupname: ''
-  nproc: 1
+  nprocess: 8
   inputs:
   - MAG_U
   - MAG_G
@@ -63,20 +62,19 @@ som_wide_informer_big:
   - MAGERR_I
   - MAGERR_Z
   zero_points:
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
   som_shape: [32, 32]
-  som_minerror: 0.005
+  som_minerror: 0.001
   som_wrap: false
-  som_take_log: true
+  som_take_log: false
   convert_to_flux: true
   set_threshold: true
   thresh_val: 1.0e-05
   thresh_val_err: 1.0e-05
   name: som_wide_informer_big
-  model: CARDINAL_model_wide.pkl
-  som_takelog: false
+  model: model_wide.pkl
   config: null
