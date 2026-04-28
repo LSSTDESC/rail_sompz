@@ -4,23 +4,22 @@ resume: true
 config: cardinal_inform_config.yml
 modules: rail
 inputs:
-  input_deep_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/balrog_data.hdf5
-  input_wide_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/wide_data_subsample.hdf5
+  input_deep_data: /scratch/gpfs/jm8767/sompz_cardinal/cat_v5/v0.23.0/Chinchilla-3Y3a_v2.0_obs.comb_incl_WFD_and_DDF_select_subsample.hdf5
+  input_wide_data: /scratch/gpfs/jm8767/sompz_cardinal/cat_v5/v0.23.0/Chinchilla-3Y3a_v2.0_obs.comb_incl_WFD_and_DDF_select_subsample.hdf5
 stages:
 - name: som_deep_informer_big
   classname: SOMPZInformer
-  nprocess: 1
   module_name: rail.estimation.algos.sompz
   aliases:
     model: model_som_deep_informer
     input_data: input_deep_data
 - name: som_wide_informer_big
   classname: SOMPZInformer
-  nprocess: 1
   module_name: rail.estimation.algos.sompz
   aliases:
     model: model_som_wide_informer
     input_data: input_wide_data
 site:
-  max_threads: 2
-  name: cori-batch
+  max_threads: 4
+  name: local
+  # name: cori-batch

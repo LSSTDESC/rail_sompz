@@ -1,13 +1,13 @@
 som_deepdeep_estimator:
   output_mode: default
-  chunk_size: 2000
+  chunk_size: 10000
   hdf5_groupname: ''
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  zbins_min: &id010 0.0 
+  zbins_max: &id011 3.0 
+  zbins_dz: &id012 0.01
   calculated_point_estimates: &id001 []
   recompute_point_estimates: false
-  redshift_col: Z
+  redshift_col: &id017 Z
   inputs: &id002
   - TRUEMAG_lsst_u
   - TRUEMAG_lsst_g
@@ -25,45 +25,45 @@ som_deepdeep_estimator:
   - TRUEMAG_ERR_lsst_i
   - TRUEMAG_ERR_lsst_z
   - TRUEMAG_ERR_lsst_y
-  - TRUEMAG_ERR_Roman_J129
-  - TRUEMAG_ERR_Roman_H158
-  - TRUEMAG_ERR_Roman_F184  
+  - TRUEMAG_ERR_J129
+  - TRUEMAG_ERR_H158
+  - TRUEMAG_ERR_F184  
   zero_points: &id004
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0  
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0  
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30  
+  - 30
+  - 30
+  - 30
+  - 30  
   som_shape: &id005
-  - 32
-  - 32
-  som_minerror: 0.01
-  som_wrap: false
-  som_take_log: false
-  convert_to_flux: true
+  - 128
+  - 128
+  som_minerror: 0.001
+  som_wrap: &id013 false
+  som_take_log: &id014 false
+  convert_to_flux: &id015 true
   set_threshold: true
   thresh_val: 1.0e-05
-  debug: false
+  debug: &id016 false
   name: som_deepdeep_estimator
-  model: CARDINAL_model_deep.pkl
+  model: model_deep.pkl
   assignment: deepdata_deep_assignment.hdf5
-  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/balrog_data.hdf5
+  data: /scratch/gpfs/jm8767/sompz_cardinal/cat_v5/v0.23.0/Chinchilla-3Y3a_v2.0_obs.comb_incl_WFD_and_DDF_select_subsample_with_overlap_weight.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_deepwide_estimator:
   output_mode: default
-  chunk_size: 2000
+  chunk_size: 10000
   hdf5_groupname: ''
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  redshift_col: Z
+  redshift_col: *id017
   inputs: &id006
   - MAG_U
   - MAG_G
@@ -77,223 +77,185 @@ som_deepwide_estimator:
   - MAGERR_I
   - MAGERR_Z
   zero_points: &id008
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
-  - 30.0
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
   som_shape: &id009
   - 32
   - 32
-  som_minerror: 0.005
-  som_wrap: false
-  som_take_log: false
-  convert_to_flux: true
+  som_minerror: 0.001
+  som_wrap: &id018 false
+  som_take_log: &id019 false
+  convert_to_flux: &id020 true
   set_threshold: true
   thresh_val: 1.0e-05
-  debug: false
+  debug: *id016
   name: som_deepwide_estimator
-  model: CARDINAL_model_wide.pkl
+  model: model_wide.pkl
   assignment: deepdata_wide_assignment.hdf5
-  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/balrog_data.hdf5
+  data: /scratch/gpfs/jm8767/sompz_cardinal/cat_v5/v0.23.0/Chinchilla-3Y3a_v2.0_obs.comb_incl_WFD_and_DDF_select_subsample_with_overlap_weight.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_deepspec_estimator:
   output_mode: default
-  chunk_size: 2000
+  chunk_size: 10000
   hdf5_groupname: ''
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  redshift_col: Z
+  redshift_col: *id017
   inputs: *id002
   input_errs: *id003
   zero_points: *id004
   som_shape: *id005
-  som_minerror: 0.01
-  som_wrap: false
-  som_take_log: false
-  convert_to_flux: true
+  som_minerror: 0.001
+  som_wrap: *id013
+  som_take_log: *id014
+  convert_to_flux: *id015
   set_threshold: true
   thresh_val: 1.0e-05
-  debug: false
+  debug: *id016
   name: som_deepspec_estimator
-  model: CARDINAL_model_deep.pkl
-  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/spec_data_subsample.hdf5
+  model: model_deep.pkl
+  data: /scratch/gpfs/jm8767/sompz_cardinal/cat_v5/v0.23.0/Chinchilla-3Y3a_v2.0_obs.comb_incl_WFD_and_DDF_select_subsample_with_overlap_weight.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_widewide_estimator:
   output_mode: default
-  chunk_size: 2000
+  chunk_size: 10000
   hdf5_groupname: ''
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  redshift_col: Z
+  redshift_col: *id017
   inputs: *id006
   input_errs: *id007
   zero_points: *id008
   som_shape: *id009
-  som_minerror: 0.005
-  som_wrap: false
-  som_take_log: false
-  convert_to_flux: true
+  som_minerror: 0.001
+  som_wrap: *id018
+  som_take_log: *id019
+  convert_to_flux: *id020
   set_threshold: true
   thresh_val: 1.0e-05
-  debug: false
+  debug: *id016
   name: som_widewide_estimator
-  model: CARDINAL_model_wide.pkl
+  model: model_wide.pkl
   assignment: widedata_wide_assignment.hdf5
-  data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.6.0/wide_data_subsample.hdf5
+  data: /scratch/gpfs/jm8767/sompz_cardinal/cat_v5/v0.23.0/Chinchilla-3Y3a_v2.0_obs.comb_incl_WFD_and_DDF_select_subsample_with_overlap_weight.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_widespec_estimator:
   output_mode: default
-  chunk_size: 2000
+  chunk_size: 10000
   hdf5_groupname: ''
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  redshift_col: Z
+  redshift_col: *id017
   inputs: *id006
   input_errs: *id007
   zero_points: *id008
   som_shape: *id009
-  som_minerror: 0.005
-  som_wrap: false
-  som_take_log: false
-  convert_to_flux: true
+  som_minerror: 0.001
+  som_wrap: *id018
+  som_take_log: *id019
+  convert_to_flux: *id020
   set_threshold: true
   thresh_val: 1.0e-05
-  debug: false
+  debug: *id016
   name: som_widespec_estimator
-  model: CARDINAL_model_wide.pkl
+  model: model_wide.pkl
   assignment: specdata_wide_assignment.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_pzc_stage:
   output_mode: default
-  chunk_size: 2000
-  hdf5_groupname: photometry
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  inputs: &id010
-  - MAG_U
-  - MAG_G
-  - MAG_R
-  - MAG_I
-  - MAG_Z
-  redshift_col: Z
+  redshift_col: *id017
   deep_groupname: ''
-  bin_edges:
+  bin_edges: &id021
   - 0.0
-  - 0.35
-  - 0.54
-  - 0.73
-  - 0.99
-  - 2.29
-  zbins_min: 0.0
-  zbins_max: 3.0
-  zbins_dz: 0.01
+  - 0.340136
+  - 0.51417369
+  - 0.675139
+  - 0.85570544
+  - 2.35
   name: som_pzc_stage
+  overlap_weighted_pzc: true
   pz_c: pz_c.hdf5
   config: null
 pcchat_stage:
   output_mode: default
-  chunk_size: 2000
-  hdf5_groupname: photometry
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  chunk_size: 10000
+  hdf5_groupname: ''
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  inputs: *id010
   name: pcchat_stage
-  deep_som_size: 4096
-  wide_som_size: 1024
-  redshift_col: Z
+  deep_som_size: &id022 16384
+  wide_som_size: &id023 1024
   config: null
 sompz_pzchat:
   output_mode: default
-  chunk_size: 2000
-  hdf5_groupname: photometry
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  inputs: *id010
-  redshift_col: Z
-  bin_edges:
-  - 0.0
-  - 0.35
-  - 0.54
-  - 0.73
-  - 0.99
-  - 2.29
-  zbins_min: 0.0
-  zbins_max: 3.0
-  zbins_dz: 0.01
+  redshift_col: *id017
+  bin_edges: *id021
   name: sompz_pzchat
+  overlap_weighted_pzc: true
   config: null
 sompz_tomobin:
   output_mode: default
-  chunk_size: 2000
-  hdf5_groupname: photometry
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  inputs: *id010
-  redshift_col: Z
-  bin_edges:
-  - 0.0
-  - 0.35
-  - 0.54
-  - 0.73
-  - 0.99
-  - 2.29
-  zbins_min: 0.0
-  zbins_max: 3.0
-  zbins_dz: 0.01
+  redshift_col: *id017
+  bin_edges: *id021
   name: sompz_tomobin
-  wide_som_size: 1024
-  deep_som_size: 1024
+  overlap_weighted: true
+  deep_som_size: *id022
+  wide_som_size: *id023
   tomo_bins_wide: tomo_bins_wide.hdf5
   config: null
 sompz_nz:
   output_mode: default
-  chunk_size: 2000
-  hdf5_groupname: photometry
-  zmin: 0.0
-  zmax: 3.0
-  nzbins: 301
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
   calculated_point_estimates: *id001
   recompute_point_estimates: false
-  inputs: *id010
-  redshift_col: Z
-  bin_edges:
-  - 0.0
-  - 0.35
-  - 0.54
-  - 0.73
-  - 0.99
-  - 2.29
-  zbins_min: 0.0
-  zbins_max: 3.0
-  zbins_dz: 0.01
+  redshift_col: *id017
+  bin_edges: *id021
   name: sompz_nz
-  wide_som_size: 1024
-  deep_som_size: 1024
+  overlap_weighted_pchat: true
+  overlap_weighted_pzc: true
+  use_bin_conditioning: true
+  deep_som_size: *id022  
+  wide_som_size: *id023
   nz: FINAL_NZ.hdf5
   config: null
