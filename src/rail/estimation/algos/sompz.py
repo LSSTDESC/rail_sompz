@@ -173,8 +173,11 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
                     weights = df[overlap_key].values
                 else:
                     weights = np.ones(len(z))
-                hist = np.histogram(z, bins, weights=weights, density=True)[
-                    0]  # make weighted histogram by overlap weights
+
+                hist = np.histogram(z, bins, weights=weights, density=True)[0]  # make weighted histogram by overlap weights
+                if np.isnan(hist).any(): # add nan case handling b/c having no z within bins and setting density=True leads to nans
+                    hist = np.zeros_like(hist)
+                
                 populated_cells.append([ci, c])
             elif type(key) is list:  # pragma: no cover
                 # use full p(z)
