@@ -132,10 +132,14 @@ som_widewide_estimator:
   # inputs: *id006
   # input_errs: *id007
   inputs: 
+  - mag_u_lsst
+  - mag_g_lsst  
   - mag_r_lsst
   - mag_i_lsst
   - mag_z_lsst
   input_errs: 
+  - mag_u_lsst_err
+  - mag_g_lsst_err
   - mag_r_lsst_err
   - mag_i_lsst_err
   - mag_z_lsst_err
@@ -164,10 +168,14 @@ som_widespec_estimator:
   calculated_point_estimates: *id001
   recompute_point_estimates: false
   inputs: 
+  - mag_u_lsst
+  - mag_g_lsst  
   - mag_r_lsst
   - mag_i_lsst
   - mag_z_lsst
   input_errs: 
+  - mag_u_lsst_err
+  - mag_g_lsst_err
   - mag_r_lsst_err
   - mag_i_lsst_err
   - mag_z_lsst_err  
