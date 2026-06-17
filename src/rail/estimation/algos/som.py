@@ -27,18 +27,15 @@ def parallel_dsq(vn, s, w, df, h, sPenalty):
             ####
             if np.any(np.isinf(numerator)):  # pragma: no cover
                 #pdb.set_trace()
-                print("inf numerator at", np.where(np.isinf(numerator)))
+                print("inf numerator at: ", np.where(np.isinf(numerator)))
                 print(np.any(np.isinf(w)),
                       np.any(np.isinf(vnS)),
                       np.any(np.isinf(dn)),
                       np.any(vnS <= 0))
             if np.any(np.isnan(numerator)):  # pragma: no cover
                 #pdb.set_trace()
-                print("nan numerator at", np.where(np.isnan(numerator)))
-                print(np.any(np.isnan(w)),
-                      np.any(np.isnan(vnS)),
-                      np.any(np.isnan(dn)),
-                      np.any(vnS <= 0))
+                print("nan numerator at: ", np.where(np.isnan(numerator)))
+                print(f"found nan in: w={np.any(np.isnan(w))}, vnS={np.any(np.isnan(vnS))}, dn={np.any(np.isnan(dn))}; vnS <= 0={np.any(vnS <= 0)}")
 
             dn = numerator / (1 + w)
             d = (dn - df) * h

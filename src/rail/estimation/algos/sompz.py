@@ -1602,10 +1602,13 @@ class SOMPZTomobin(CatEstimator):
               ('balrog_data', TableHandle),
               ('cell_deep_balrog_data', TableHandle),
               ('cell_wide_balrog_data', TableHandle),
+              ('cell_wide_wide_data', TableHandle),
               ('pz_c', Hdf5Handle),
               ('pc_chat', Hdf5Handle),
               ]
-    outputs = [('tomo_bins_wide', Hdf5Handle)]
+    outputs = [('tomo_bins_wide', Hdf5Handle),
+               ('bhat_for_wide_data', Hdf5Handle),
+               ]
 
     def __init__(self, args, **kwargs):
         """Constructor, build the CatEstimator, then do SOMPZ specific setup
@@ -1620,6 +1623,7 @@ class SOMPZTomobin(CatEstimator):
         cell_wide_spec_data = self.get_data('cell_wide_spec_data')
         cell_deep_balrog_data = self.get_data('cell_deep_balrog_data')
         cell_wide_balrog_data = self.get_data('cell_wide_balrog_data')
+        cell_wide_wide_data = self.get_data('cell_wide_wide_data')
         # print('cell_wide_spec_data', cell_wide_spec_data['som_size'])
         # print('cell_deep_spec_data', cell_deep_spec_data['som_size'])
         
@@ -1680,8 +1684,18 @@ class SOMPZTomobin(CatEstimator):
         # self.add_data('tomo_bins_deep', dict(tomo_bins_deep=tomo_bins_deep_mapping))
         self.add_data('tomo_bins_wide', dict(tomo_bins_wide=tomo_bins_mapping))
 
+        # Per-galaxy tomographic bin from wide SOM cell index (TableHandle columns are arrays).
+        lookup = np.full(self.wide_som_size, -1, dtype=np.int64)
+        for tomo_bin_idx in tomo_bins_wide_dict:
+            lookup[np.asarray(tomo_bins_wide_dict[tomo_bin_idx], dtype=np.int64)] = tomo_bin_idx
+
+        wide_cells = np.asarray(cell_wide_wide_data['cells'], dtype=np.int64)
+        bhat_for_wide_data = lookup[wide_cells]
+        self.add_data('bhat_for_wide_data', dict(bhat_for_wide_data=bhat_for_wide_data))
+
     def estimate(self, spec_data, cell_deep_spec_data, cell_wide_spec_data,
                  balrog_data, cell_deep_balrog_data, cell_wide_balrog_data, 
+                 cell_wide_wide_data,
                  pz_c, pc_chat):
         self.set_data('spec_data', spec_data)
         self.set_data('cell_deep_spec_data', cell_deep_spec_data)
@@ -1689,6 +1703,7 @@ class SOMPZTomobin(CatEstimator):
         self.set_data('balrog_data', balrog_data)
         self.set_data('cell_deep_balrog_data', cell_deep_balrog_data)
         self.set_data('cell_wide_balrog_data', cell_wide_balrog_data)
+        self.set_data('cell_wide_wide_data', cell_wide_wide_data)
         self.set_data('pz_c', pz_c)
         self.set_data('pc_chat', pc_chat)
         self.run()
