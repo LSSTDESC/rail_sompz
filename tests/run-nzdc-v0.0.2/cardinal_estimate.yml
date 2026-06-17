@@ -6,41 +6,41 @@ modules: rail
 inputs:
   deep_model: model_deep.pkl
   wide_model: model_wide.pkl
-  input_deep_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.16.0/balrog_data.hdf5
-  input_spec_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.16.0/spec_data_subsample.hdf5
-  input_wide_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v3/v0.16.0/wide_data_subsample.hdf5
+  input_spec_data: /scratch/gpfs/jm8767/desc/public/nz_challenge_taskset_1_cardinal_1yr_ddf_00_forsompz.hdf5
+  input_deep_data: /scratch/gpfs/jm8767/desc/public/nz_challenge_taskset_1_cardinal_1yr_ddf_00_forsompz.hdf5
+  input_wide_data: /scratch/gpfs/jm8767/desc/public/nz_challenge_taskset_1_cardinal_1yr_wfd_forsompz.hdf5
 stages:
 - name: som_deepdeep_estimator
   classname: SOMPZEstimatorDeep
-  nprocess: 128
+  nprocess: 32
   module_name: rail.estimation.algos.sompz
   aliases:
     data: input_deep_data
     assignment: assignment_som_deepdeep_estimator
 - name: som_deepwide_estimator
   classname: SOMPZEstimatorWide
-  nprocess: 128
+  nprocess: 32
   module_name: rail.estimation.algos.sompz
   aliases:
     data: input_deep_data
     assignment: assignment_som_deepwide_estimator
 - name: som_deepspec_estimator
   classname: SOMPZEstimatorDeep
-  nprocess: 128
+  nprocess: 32
   module_name: rail.estimation.algos.sompz
   aliases:
     assignment: assignment_som_deepspec_estimator
     data: input_spec_data
 - name: som_widewide_estimator
   classname: SOMPZEstimatorWide
-  nprocess: 128
+  nprocess: 32
   module_name: rail.estimation.algos.sompz
   aliases:
     assignment: assignment_som_widewide_estimator
     data: input_wide_data
 - name: som_widespec_estimator
   classname: SOMPZEstimatorWide
-  nprocess: 128
+  nprocess: 32
   module_name: rail.estimation.algos.sompz
   aliases:
     assignment: assignment_som_widespec_estimator
@@ -80,18 +80,26 @@ stages:
     spec_data: input_spec_data
     cell_deep_spec_data: assignment_som_deepspec_estimator
     cell_wide_spec_data: assignment_som_widespec_estimator
+    balrog_data: input_deep_data
+    cell_deep_balrog_data: assignment_som_deepdeep_estimator
+    cell_wide_balrog_data: assignment_som_deepwide_estimator
+    cell_wide_wide_data: assignment_som_widewide_estimator
+    pz_c: pz_c_som_pzc_stage
+    pc_chat: pc_chat_pcchat_stage
     tomo_bins_wide: tomo_bins_wide_sompz_tomobin
 - name: sompz_nz
-  classname: SOMPZnz
+  classname: SOMPZnz_fast
   nprocess: 1
   module_name: rail.estimation.algos.sompz
   aliases:
     spec_data: input_spec_data
     cell_deep_spec_data: assignment_som_deepspec_estimator
     cell_wide_wide_data: assignment_som_widewide_estimator
+    wide_data: input_wide_data
     tomo_bins_wide: tomo_bins_wide_sompz_tomobin
+    pz_c: pz_c_som_pzc_stage
     pc_chat: pc_chat_pcchat_stage
     nz: nz_sompz_nz
 site:
-  max_threads: 2
-  name: cori-batch
+  max_threads: 32
+  name: local
