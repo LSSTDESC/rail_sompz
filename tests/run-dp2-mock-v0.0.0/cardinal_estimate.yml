@@ -1,0 +1,35 @@
+output_dir: .
+log_dir: .
+resume: true
+config: cardinal_estimate_config.yml
+modules: rail
+inputs:
+  deep_model: model_deep.pkl
+  input_deep_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  input_spec_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+stages:
+- name: som_deepdeep_estimator
+  classname: SOMPZEstimatorDeep
+  nprocess: 32
+  module_name: rail.estimation.algos.sompz
+  aliases:
+    data: input_deep_data
+    assignment: assignment_som_deepdeep_estimator
+- name: som_deepspec_estimator
+  classname: SOMPZEstimatorDeep
+  nprocess: 32
+  module_name: rail.estimation.algos.sompz
+  aliases:
+    assignment: assignment_som_deepspec_estimator
+    data: input_spec_data
+- name: som_pzc_stage
+  classname: SOMPZPzc
+  nprocess: 1
+  module_name: rail.estimation.algos.sompz
+  aliases:
+    cell_deep_spec_data: assignment_som_deepspec_estimator
+    spec_data: input_spec_data
+    pz_c: pz_c_som_pzc_stage
+site:
+  max_threads: 32
+  name: cori-batch

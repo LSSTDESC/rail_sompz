@@ -1,0 +1,17 @@
+output_dir: .
+log_dir: .
+resume: true
+config: cardinal_inform_config.yml
+modules: rail
+inputs:
+  input_deep_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+stages:
+- name: som_deep_informer_big
+  classname: SOMPZInformer
+  module_name: rail.estimation.algos.sompz
+  aliases:
+    model: model_som_deep_informer
+    input_data: input_deep_data
+site:
+  max_threads: 4
+  name: cori-batch

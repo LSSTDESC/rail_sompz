@@ -1,0 +1,89 @@
+som_deepdeep_estimator:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: &id010 0.0 
+  zbins_max: &id011 3.0
+  zbins_dz: &id012 0.01
+  calculated_point_estimates: &id001 []
+  recompute_point_estimates: false
+  redshift_col: &id017 redshift
+  inputs: &id002
+  - mag_g_lsst
+  - mag_r_lsst
+  - mag_i_lsst
+  - mag_z_lsst
+  - mag_y_lsst
+  input_errs: &id003
+  - mag_g_lsst_err
+  - mag_r_lsst_err
+  - mag_i_lsst_err
+  - mag_z_lsst_err
+  - mag_y_lsst_err
+  zero_points: &id004
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  som_shape: &id005
+  - 32
+  - 32
+  som_minerror: 0.001
+  som_wrap: &id013 false
+  som_take_log: &id014 true
+  convert_to_flux: &id015 true
+  set_threshold: true
+  thresh_val: 1.0e-05
+  debug: &id016 false
+  name: som_deepdeep_estimator
+  model: model_deep.pkl
+  data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  thresh_val_err: 1.0e-05
+  config: null
+som_deepspec_estimator:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  inputs: *id002
+  input_errs: *id003
+  zero_points: *id004
+  som_shape: *id005
+  som_minerror: 0.001
+  som_wrap: *id013
+  som_take_log: *id014
+  convert_to_flux: *id015
+  set_threshold: true
+  thresh_val: 1.0e-05
+  debug: *id016
+  name: som_deepspec_estimator
+  model: model_deep.pkl
+  data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  thresh_val_err: 1.0e-05
+  config: null
+som_pzc_stage:
+  output_mode: default
+  chunk_size: 10000
+  hdf5_groupname: ''
+  zbins_min: *id010
+  zbins_max: *id011
+  zbins_dz: *id012
+  calculated_point_estimates: *id001
+  recompute_point_estimates: false
+  redshift_col: *id017
+  deep_groupname: ''
+  bin_edges: &id021
+  - 0.0
+  - 0.6
+  - 0.9
+  - 1.2
+  - 3.0
+  name: som_pzc_stage
+  pz_c: pz_c.hdf5
+  config: null
