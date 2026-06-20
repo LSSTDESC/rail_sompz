@@ -59,6 +59,11 @@ def magerr2fluxerr(magerr, flux):
     coef = np.log(10) / -2.5
     return np.abs(coef * magerr * flux)
 
+def get_mean(zmids,hists):
+    normalization = np.sum(hists)
+    if normalization == 0:
+        normalization = 1
+    return np.sum(zmids*hists)/normalization
 
 def _table_cols_df(table, key, extra):
     """DataFrame from ``table``; ``key`` is str or list of PDF column names."""
@@ -393,6 +398,30 @@ def redshift_distributions_wide(data,
             hists.append(hist)
         hists = np.array(hists)
         return hists
+
+def get_cell_weights_np(deep_assignment, deep_data, n_cells,
+                        overlap_weighted=False):
+    # TODO: implement single get_cell_weights function instead of using this one and get_cell_weights 
+    # in different contexts
+
+    # get weight based on cell occupation
+    cells, cell_counts = np.unique(deep_assignment, return_counts=True)
+    weights = np.zeros(n_cells)
+    # weights[cells] = cell_counts[cells]  # old weighting based on cell occupation
+
+    # get weights from column
+    for cell in cells:
+        sel = (deep_assignment == cell)
+        # weights[cell] = np.sum(deep_data['i_hsmshaperegauss_derived_weight'][sel])
+        if overlap_weighted:
+            weights[cell] = np.sum(deep_data['overlap_weight'][sel])
+        else:
+            weights[cell] = len(deep_data['redshift'][sel])
+
+    # convert to shape to be multiplied with pz_c
+    weights = weights[:, np.newaxis]
+    
+    return weights
 
 def get_cell_weights(data, overlap_weighted, key):
     """Given data, get cell weights and indices
@@ -1583,6 +1612,139 @@ class SOMPZPc_chat(CatEstimator):
         self.finalize()
 
 
+class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
+    """Calculate tomobin
+    """
+    name = "SOMPZ_tomobin_and_nz_onesom"
+    config_options = CatEstimator.config_options.copy()
+    config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
+                          redshift_col=SOMPZ_REDSHIFT_COL_PARAM,
+                          bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
+                          zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
+                          zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
+                          zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
+                          overlap_weighted=Param(bool, False, msg="if True, use overlap_weight when defining tomographic bins"),
+                          )
+    # by arbitrary convention, use the same variable names as two-som, 
+    # with 'deep' as the label for the lensing sample
+    inputs = [('spec_data', TableHandle),
+              ('cell_deep_spec_data', TableHandle),
+              ('balrog_data', TableHandle),
+              ('cell_deep_balrog_data', TableHandle),
+              ('pz_c', Hdf5Handle),
+              ]
+    outputs = [('tomo_bins_wide', Hdf5Handle),
+               ('bhat_for_wide_data', Hdf5Handle),
+               ('nz', QPHandle)
+               ]
+    def __init__(self, args, **kwargs):
+        """Constructor, build the CatEstimator, then do SOMPZ specific setup
+        """
+        super().__init__(args, **kwargs)
+        # check on bands, errs, and prior band
+
+    def run(self):
+        spec_data = self.get_data('spec_data')
+        balrog_data = self.get_data('balrog_data')
+        cell_deep_spec_data = self.get_data('cell_deep_spec_data')
+        # cell_wide_spec_data = self.get_data('cell_wide_spec_data')
+        cell_deep_balrog_data = self.get_data('cell_deep_balrog_data')
+        # cell_wide_balrog_data = self.get_data('cell_wide_balrog_data')
+        # cell_wide_wide_data = self.get_data('cell_wide_wide_data')
+        bin_edges = self.config.bin_edges
+        overlap_weighted = self.config.overlap_weighted
+        n_cells = np.prod(self.config.som_shape)
+
+        # self.wide_som_size = int(cell_wide_spec_data['som_size'][0])
+        self.deep_som_size = int(cell_deep_spec_data['som_size'][0])
+        key = self.config.redshift_col
+        zbins = _zbins_histogram_grid(
+            self.config.zbins_min, self.config.zbins_max, self.config.zbins_dz, key)
+        zmids = 0.5 * (zbins[1:] + zbins[:-1])
+        pz_c = self.get_data('pz_c')['pz_c'][:]
+        meanz_c = np.array([get_mean(zmids, pz_c[i]) for i in range(len(pz_c))])
+        order_by_meanz_c = np.argsort(meanz_c)
+
+        # construct bins to yield equal counts of WL sample galaxies
+        assignments = cell_deep_balrog_data['cells']
+        weights = get_cell_weights_np(assignments, balrog_data, n_cells, 
+                                      overlap_weighted=overlap_weighted)
+        # cells, weights = get_cell_weights(balrog_data, overlap_weighted, key)
+        cell_counts = weights[:, 0]
+
+        ngal = cell_counts.sum()
+        nbins = len(bin_edges) - 1
+        target_per_bin = ngal / nbins
+
+        # iterate over cells in order of increasing <z|c>, split when cumulative count reaches each target
+        occupied_cells = order_by_meanz_c[cell_counts[order_by_meanz_c] > 0]
+        cumsum = np.cumsum(cell_counts[occupied_cells])
+        split_at = [
+            np.searchsorted(cumsum, (b + 1) * target_per_bin, side='right')
+            for b in range(nbins - 1)
+        ]
+
+        cells_by_bin = []
+        start = 0
+        for stop in split_at + [len(occupied_cells)]:
+            cells_by_bin.append(occupied_cells[start:stop])
+            start = stop
+
+        # convert cells_by_bin into dict as used in the two SOM mode
+        tomo_bins_mapping = {}
+        for i in range(len(cells_by_bin)):
+            tomo_bins_mapping[i] = cells_by_bin[i]
+
+        # tomo_bins_mapping = -1 * np.ones((self.wide_som_size, 2))
+        # for key in tomo_bins_wide:
+        #     tomo_bins_mapping[tomo_bins_wide[key][:, 0].astype(int), 0] = key
+        #     tomo_bins_mapping[tomo_bins_wide[key][:, 0].astype(int), 1] = tomo_bins_wide[key][:, 1]
+        # # self.add_data('tomo_bins_deep', dict(tomo_bins_deep=tomo_bins_deep_mapping))
+        self.add_data('tomo_bins_wide', dict(tomo_bins_wide=tomo_bins_mapping))
+
+        # Per-galaxy tomographic bin from wide SOM cell index (TableHandle columns are arrays).
+        lookup = np.full(self.deep_som_size, -1, dtype=np.int64)
+        for tomo_bin_idx in tomo_bins_mapping:
+            lookup[np.asarray(tomo_bins_mapping[tomo_bin_idx], dtype=np.int64)] = tomo_bin_idx
+
+        som_cells = np.asarray(cell_deep_balrog_data['cells'], dtype=np.int64)
+        bhat_for_data = lookup[som_cells]
+        self.add_data('bhat_for_wide_data', dict(bhat_for_wide_data=bhat_for_data))
+
+        # sum cells to construct n(z)
+        nz = np.zeros((nbins, len(zmids)))
+        for i in range(nbins):
+            cells_i = cells_by_bin[i]
+            bin_ngal = cell_counts[cells_i].sum()
+            nz[i, :] = np.sum(pz_c[cells_i] * weights[cells_i], axis=0)
+            print(
+                f"Bin {i}: {len(cells_i)} cells, {bin_ngal:.0f} galaxies "
+                f"(target {target_per_bin:.0f}, <z|c> range "
+                f"{meanz_c[cells_i].min():.3f}–{meanz_c[cells_i].max():.3f})"
+            )
+
+        tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=zmids, yvals=nz))
+        self.add_data('nz', tomo_ens)
+    
+    def estimate(self, spec_data, cell_deep_spec_data, 
+                 #cell_wide_wide_data,
+                 balrog_data, cell_deep_balrog_data, 
+                 #cell_wide_balrog_data, cell_wide_wide_data,
+                 pz_c, #pc_chat
+                 ):
+        self.set_data('spec_data', spec_data)
+        self.set_data('cell_deep_spec_data', cell_deep_spec_data)
+        # self.set_data('cell_wide_spec_data', cell_wide_spec_data)
+        self.set_data('balrog_data', balrog_data)
+        self.set_data('cell_deep_balrog_data', cell_deep_balrog_data)
+        # self.set_data('cell_wide_balrog_data', cell_wide_balrog_data)
+        # self.set_data('cell_wide_wide_data', cell_wide_wide_data)
+        self.set_data('pz_c', pz_c)
+        # self.set_data('pc_chat', pc_chat)
+        self.run()
+        self.finalize()
+
+
 class SOMPZTomobin(CatEstimator):
     """Calculate tomobin
     """
@@ -1923,7 +2085,6 @@ class SOMPZnz_fast(CatEstimator):
         self.set_data('pz_c', pz_c)
         self.run()
         self.finalize()
-
 
 class SOMPZEstimatorBase(CatEstimator):
     """CatEstimator subclass to compute redshift PDFs for SOMPZ
