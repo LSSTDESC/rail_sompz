@@ -416,7 +416,8 @@ def get_cell_weights_np(deep_assignment, deep_data, n_cells,
         if overlap_weighted:
             weights[cell] = np.sum(deep_data['overlap_weight'][sel])
         else:
-            weights[cell] = len(deep_data['redshift'][sel])
+            key_tmp = list(deep_data.keys())[0]
+            weights[cell] = len(deep_data[key_tmp][sel])
 
     # convert to shape to be multiplied with pz_c
     weights = weights[:, np.newaxis]

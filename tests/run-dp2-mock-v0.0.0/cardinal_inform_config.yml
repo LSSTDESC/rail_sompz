@@ -8,15 +8,12 @@ som_deep_informer_big:
   - mag_r_lsst
   - mag_i_lsst
   - mag_z_lsst
-  - mag_y_lsst
   input_errs:
   - mag_g_lsst_err
   - mag_r_lsst_err
   - mag_i_lsst_err
   - mag_z_lsst_err
-  - mag_y_lsst_err
   zero_points:
-  - 30
   - 30
   - 30
   - 30

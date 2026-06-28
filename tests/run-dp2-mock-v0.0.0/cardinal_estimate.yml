@@ -1,12 +1,16 @@
 output_dir: .
 log_dir: .
 resume: true
-config: estimate_config1.yml
+config: cardinal_estimate_config.yml
 modules: rail
 inputs:
   deep_model: model_deep.pkl
-  input_deep_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
-  input_spec_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  #input_deep_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  #input_spec_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  input_deep_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_mock_run_cardinal_gold_test/output_deredden_lsst_obs_cond_dp2_select_v0_for_sompz.hdf5
+  input_spec_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_mock_run_cardinal_gold_test/output_deredden_lsst_obs_cond_dp2_select_v0_for_sompz.hdf5
+  # input_deep_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v5/v0.24.0/wide_data_subsample_with_overlap_weight.hdf5
+  # input_spec_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v5/v0.24.0/wide_data_subsample_with_overlap_weight.hdf5
 stages:
 - name: som_deepdeep_estimator
   classname: SOMPZEstimatorDeep
@@ -41,5 +45,5 @@ stages:
     cell_deep_balrog_data: assignment_som_deepdeep_estimator
     pz_c: pz_c_som_pzc_stage
 site:
-  max_threads: 32
-  name: cori-batch
+  max_threads: 64
+  name: local

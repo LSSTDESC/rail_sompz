@@ -13,15 +13,12 @@ som_deepdeep_estimator:
   - mag_r_lsst
   - mag_i_lsst
   - mag_z_lsst
-  - mag_y_lsst
   input_errs: &id003
   - mag_g_lsst_err
   - mag_r_lsst_err
   - mag_i_lsst_err
   - mag_z_lsst_err
-  - mag_y_lsst_err
   zero_points: &id004
-  - 30
   - 30
   - 30
   - 30
@@ -38,7 +35,9 @@ som_deepdeep_estimator:
   debug: &id016 false
   name: som_deepdeep_estimator
   model: model_deep.pkl
-  data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  #data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_mock_run_cardinal_gold_test/output_deredden_lsst_obs_cond_dp2_select_v0_for_sompz.hdf5
+  # data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v5/v0.24.0/wide_data_subsample_with_overlap_weight.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_deepspec_estimator:
@@ -64,7 +63,9 @@ som_deepspec_estimator:
   debug: *id016
   name: som_deepspec_estimator
   model: model_deep.pkl
-  data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  #data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_mock_run_cardinal_gold_test/output_deredden_lsst_obs_cond_dp2_select_v0_for_sompz.hdf5
+  # data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v5/v0.24.0/wide_data_subsample_with_overlap_weight.hdf5
   thresh_val_err: 1.0e-05
   config: null
 som_pzc_stage:
