@@ -4,25 +4,23 @@ som_deep_informer_big:
   hdf5_groupname: ''
   nprocess: 32
   inputs:
-  - TRUEMAG_lsst_u
-  - TRUEMAG_lsst_g
-  - TRUEMAG_lsst_r
-  - TRUEMAG_lsst_i
-  - TRUEMAG_lsst_z
-  - TRUEMAG_lsst_y
-  - TRUEMAG_J129
-  - TRUEMAG_H158
-  - TRUEMAG_F184  
+  - mag_u_lsst
+  - mag_g_lsst
+  - mag_r_lsst
+  - mag_i_lsst
+  - mag_z_lsst
+  - mag_Y_roman
+  - mag_J_roman
+  - mag_H_roman
   input_errs:
-  - TRUEMAG_ERR_lsst_u
-  - TRUEMAG_ERR_lsst_g
-  - TRUEMAG_ERR_lsst_r
-  - TRUEMAG_ERR_lsst_i
-  - TRUEMAG_ERR_lsst_z
-  - TRUEMAG_ERR_lsst_y
-  - TRUEMAG_ERR_J129
-  - TRUEMAG_ERR_H158
-  - TRUEMAG_ERR_F184  
+  - mag_u_lsst_err
+  - mag_g_lsst_err
+  - mag_r_lsst_err
+  - mag_i_lsst_err
+  - mag_z_lsst_err
+  - mag_Y_roman_err
+  - mag_J_roman_err
+  - mag_H_roman_err
   zero_points:
   - 30
   - 30
@@ -32,11 +30,10 @@ som_deep_informer_big:
   - 30
   - 30
   - 30
-  - 30    
-  som_shape: [128, 128]
-  som_minerror: 0.001
+  som_shape: [32, 32] #[64, 64] # [128, 128]
+  som_minerror: 0.0001
   som_wrap: false
-  som_take_log: false
+  som_take_log: true
   convert_to_flux: true
   set_threshold: true
   thresh_val: 1.0e-05
@@ -50,17 +47,17 @@ som_wide_informer_big:
   hdf5_groupname: ''
   nprocess: 8
   inputs:
-  - MAG_U
-  - MAG_G
-  - MAG_R
-  - MAG_I
-  - MAG_Z
+  - mag_u_lsst
+  - mag_g_lsst  
+  - mag_r_lsst
+  - mag_i_lsst
+  - mag_z_lsst
   input_errs:
-  - MAGERR_U
-  - MAGERR_G
-  - MAGERR_R
-  - MAGERR_I
-  - MAGERR_Z
+  - mag_u_lsst_err
+  - mag_g_lsst_err
+  - mag_r_lsst_err
+  - mag_i_lsst_err
+  - mag_z_lsst_err
   zero_points:
   - 30
   - 30
@@ -68,9 +65,9 @@ som_wide_informer_big:
   - 30
   - 30
   som_shape: [32, 32]
-  som_minerror: 0.001
+  som_minerror: 0.0001
   som_wrap: false
-  som_take_log: false
+  som_take_log: true
   convert_to_flux: true
   set_threshold: true
   thresh_val: 1.0e-05

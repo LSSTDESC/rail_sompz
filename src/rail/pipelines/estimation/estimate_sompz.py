@@ -156,10 +156,16 @@ class EstimateSomPZPipeline(RailPipeline):
             redshift_col="redshift",
             aliases=dict(
                 spec_data="input_spec_data",
+                balrog_data="input_deep_data",
             ),
             connections=dict(
                 cell_deep_spec_data=self.som_deepspec_estimator.io.assignment,
                 cell_wide_spec_data=self.som_widespec_estimator.io.assignment,
+                cell_deep_balrog_data=self.som_deepdeep_estimator.io.assignment,
+                cell_wide_balrog_data=self.som_deepwide_estimator.io.assignment,
+                cell_wide_wide_data=self.som_widewide_estimator.io.assignment,
+                pz_c=self.som_pzc.io.pz_c,
+                pc_chat=self.som_pcchat.io.pc_chat,
             ),
         )
 

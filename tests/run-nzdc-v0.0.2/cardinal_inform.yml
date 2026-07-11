@@ -4,8 +4,8 @@ resume: true
 config: cardinal_inform_config.yml
 modules: rail
 inputs:
-  input_deep_data: /scratch/gpfs/jm8767/sompz_cardinal/cat_v5/v0.23.0/Chinchilla-3Y3a_v2.0_obs.comb_incl_WFD_and_DDF_select_subsample.hdf5
-  input_wide_data: /scratch/gpfs/jm8767/sompz_cardinal/cat_v5/v0.23.0/Chinchilla-3Y3a_v2.0_obs.comb_incl_WFD_and_DDF_select_subsample.hdf5
+  input_deep_data: /scratch/gpfs/jm8767/desc/public/nz_challenge_taskset_1_cardinal_1yr_ddf_00_forsompz.hdf5
+  input_wide_data: /scratch/gpfs/jm8767/desc/public/nz_challenge_taskset_1_cardinal_1yr_wfd_forsompz.hdf5
 stages:
 - name: som_deep_informer_big
   classname: SOMPZInformer

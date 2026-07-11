@@ -27,18 +27,15 @@ def parallel_dsq(vn, s, w, df, h, sPenalty):
             ####
             if np.any(np.isinf(numerator)):  # pragma: no cover
                 #pdb.set_trace()
-                print("inf numerator at", np.where(np.isinf(numerator)))
+                print("inf numerator at: ", np.where(np.isinf(numerator)))
                 print(np.any(np.isinf(w)),
                       np.any(np.isinf(vnS)),
                       np.any(np.isinf(dn)),
                       np.any(vnS <= 0))
             if np.any(np.isnan(numerator)):  # pragma: no cover
                 #pdb.set_trace()
-                print("nan numerator at", np.where(np.isnan(numerator)))
-                print(np.any(np.isnan(w)),
-                      np.any(np.isnan(vnS)),
-                      np.any(np.isnan(dn)),
-                      np.any(vnS <= 0))
+                print("nan numerator at: ", np.where(np.isnan(numerator)))
+                print(f"found nan in: w={np.any(np.isnan(w))}, vnS={np.any(np.isnan(vnS))}, dn={np.any(np.isnan(dn))}; vnS <= 0={np.any(vnS <= 0)}")
 
             dn = numerator / (1 + w)
             d = (dn - df) * h
@@ -262,7 +259,7 @@ class NoiseSOM:
         Also returns a vector of the distance^2 to each BMU.
         """
         # Break the inputs into chunks for speed
-        blocksize = 10
+        blocksize = 100
         nPts = data.shape[0]
         bmu = np.zeros(nPts, dtype=int)
         dsq = np.zeros(nPts, dtype=float)
@@ -437,10 +434,12 @@ class AsinhMetric:
         # and return the one with least distance.
         # Break the cells into bunches to avoid super-large 4d arrays
 
-        chunk = 512
         if pool is not None:
-            chunk = pool[1]
-            chunk = int(chunk)
+            chunk = int(pool[1])
+        else:
+            # When running serially (no pool), use fewer larger chunks to
+            # reduce Python function-call overhead while keeping memory bounded.
+            chunk = max(1, cells.shape[0] // 512)
         # dsq is the destination array for the results (distance-squared)
         dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
         # df is the asinh of the galaxy S/N values
@@ -449,6 +448,7 @@ class AsinhMetric:
 
         # w is the weight for asinh vs geometric mean metrics
         # w: see Eqn A5 of Sanchez+2020
+        vf = np.clip(vf, a_min=None, a_max=350)
         w = np.minimum(np.exp(2 * (vf - 4)), 1000.)
         if np.any(np.isinf(w)):  # pragma: no cover
             #pdb.set_trace()
@@ -619,9 +619,9 @@ def readCOSMOS():  # pragma: no cover
     return fluxes, errors, redshifts, counts, radec
 
 
-def somPlot3d(som, az=200., el=30.):  # pragma: no cover
+def somPlot3d(som, az=200., el=30., zp=30.):  # pragma: no cover
     # Make a 3d plot of cells weights in color space.  az/el are plot view angle
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
     ik = mags[:, 3] - mags[:, 7]
@@ -649,12 +649,12 @@ def somPlot3d(som, az=200., el=30.):  # pragma: no cover
     ax.set_xlabel('gi')
     ax.set_ylabel('ik')
     ax.set_zlabel('imag')
-    return
+    return fig
 
 
-def somPlot2d(som):  # pragma: no cover
+def somPlot2d(som, zp=30.):  # pragma: no cover
     # Make a 2d plot of cells weights in color-color diagram space.
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
     ik = mags[:, 3] - mags[:, 7]
@@ -681,12 +681,12 @@ def somPlot2d(som):  # pragma: no cover
     cb.set_label('imag')
     pl.xlabel('gi')
     pl.ylabel('ik')
-    return
+    return fig
 
 
-def somPlot2dnok(som):  # pragma: no cover
+def somPlot2dnok(som, zp=30.):  # pragma: no cover
     # Make a 2d plot of cells weights in color-color diagram space.
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
     iy = mags[:, 3] - mags[:, 5]
@@ -713,46 +713,55 @@ def somPlot2dnok(som):  # pragma: no cover
     cb.set_label('imag')
     pl.xlabel('gi')
     pl.ylabel('iy')
-    return
+    return fig
 
-def somDomainColors(som):  # pragma: no cover
+def somDomainColors(som, zp=30., 
+                    bands=['u', 'g', 'r', 'i', 'z', 'y', 'J', 'H', 'F'], 
+                    indices = [0, 1, 3, 7],
+                    index_mag = 3):  # pragma: no cover
     # Make 4-panel plot colors and mag across SOM space
-    mags = 30. - 2.5 * np.log10(som.weights)
-    ug = mags[:, 0] - mags[:, 1]
-    gi = mags[:, 1] - mags[:, 3]
-    ik = mags[:, 3] - mags[:, 7]
-    imag = mags[:, 3]
+    mags = zp - 2.5 * np.log10(som.weights)
+
+    indices = sorted(indices)
+    if len(indices) != 4:
+        raise NotImplementedError("Currently only implemented for 3 colors + i mag")
+
+    ug = mags[:, indices[0]] - mags[:, indices[1]]
+    gi = mags[:, indices[1]] - mags[:, indices[2]]
+    ik = mags[:, indices[2]] - mags[:, indices[3]]
+    imag = mags[:, index_mag]
+
     fig = pl.figure(figsize=(6, 7))
 
     fig, ax = pl.subplots(nrows=2, ncols=2, figsize=(8, 8))
     im = ax[0, 0].imshow(gi.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral_r')
-    ax[0, 0].set_title('gi')
+    ax[0, 0].set_title(f'{bands[indices[1]]}{bands[indices[2]]}')
     ax[0, 0].set_aspect('equal')
     pl.colorbar(im, ax=ax[0, 0])
 
     im = ax[1, 0].imshow(ug.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral_r')
-    ax[1, 0].set_title('ug')
+    ax[1, 0].set_title(f'{bands[indices[0]]}{bands[indices[1]]}')
     ax[1, 0].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 0])
 
     im = ax[0, 1].imshow(ik.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral_r')
-    ax[0, 1].set_title('ik')
+    ax[0, 1].set_title(f'{bands[indices[2]]}{bands[indices[3]]}')
     ax[0, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[0, 1])
 
     im = ax[1, 1].imshow(imag.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral')
-    ax[1, 1].set_title('imag')
+    ax[1, 1].set_title(f'{bands[index_mag]} mag')
     ax[1, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 1])
-    return
+    return fig
 
-def somDomainColorsnok(som):  # pragma: no cover
+def somDomainColorsnok(som, zp=30.):  # pragma: no cover
     # Make 4-panel plot colors and mag across SOM space
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
     iy = mags[:, 3] - mags[:, 5]
@@ -783,7 +792,7 @@ def somDomainColorsnok(som):  # pragma: no cover
     ax[1, 1].set_title('imag')
     ax[1, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 1])
-    return
+    return fig
 
 
 def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):  # pragma: no cover
@@ -838,10 +847,10 @@ def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):  # pragma: no cover
     ax[1, 1].set_title('stddev / local slope')
     pl.colorbar(im, ax=ax[1, 1])
 
-    return
+    return fig
 
 
-def somDomainColors_withname(som, indexall, nameall, zp=22.5):  # pragma: no cover
+def somDomainColors_withname(som, indexall, nameall, zp=30.):  # pragma: no cover
     [index00, index01], [index10, index11], [index20, index21], index3 = indexall
     [name00, name01], [name10, name11], [name20, name21], [name3] = nameall
     # Make 4-panel plot colors and mag across SOM space
@@ -876,9 +885,9 @@ def somDomainColors_withname(som, indexall, nameall, zp=22.5):  # pragma: no cov
     ax[1, 1].set_title(f'{name3}mag')
     ax[1, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 1])
-    return
+    return fig
 
-def somPlot2d_withname(som, indexall, nameall, zp=22.5):  # pragma: no cover
+def somPlot2d_withname(som, indexall, nameall, zp=30.):  # pragma: no cover
     [index00, index01], [index10, index11], index2 = indexall
     [name00, name01], [name10, name11], name2 = nameall
     # Make a 2d plot of cells weights in color-color diagram space.
@@ -909,4 +918,4 @@ def somPlot2d_withname(som, indexall, nameall, zp=22.5):  # pragma: no cover
     cb.set_label('imag')
     pl.xlabel('gi')
     pl.ylabel('ik')
-    return
+    return fig

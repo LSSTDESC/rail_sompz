@@ -1,0 +1,20 @@
+output_dir: .
+log_dir: .
+resume: true
+config: cardinal_inform_config.yml
+modules: rail
+inputs:
+  #input_deep_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_deep_mock_run_cardinal_deep_test/16/output_select_lsst_cosmos_dp2_COSMOS2020_postprocessed_subsample_select_2026-06-09.hdf5
+  #input_deep_data: /scratch/gpfs/jm8767/sompz_cardinal/output_deredden_lsst_obs_cond_dp2_select_v0_for_sompz.pq
+  input_deep_data: /global/cfs/cdirs/lsst/groups/PZ/Cardinal/parquet_files/dp2_mock_run_cardinal_gold_test/output_deredden_lsst_obs_cond_dp2_select_v0_for_sompz.hdf5
+  #   input_deep_data: /pscratch/sd/j/jmyles/sompz_cardinal/cat_v5/v0.24.0/wide_data_subsample_with_overlap_weight.hdf5
+stages:
+- name: som_deep_informer_big
+  classname: SOMPZInformer
+  module_name: rail.estimation.algos.sompz
+  aliases:
+    model: model_som_deep_informer
+    input_data: input_deep_data
+site:
+  max_threads: 4
+  name: local

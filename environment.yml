@@ -13,7 +13,6 @@ dependencies:
   - bzip2=1.0.8=h4bc722e_7
   - ca-certificates=2025.1.31=hbcca054_0
   - cairo=1.18.0=hebfffa5_3
-  - certifi=2025.1.31=pyhd8ed1ab_0
   - comm=0.2.2=pyhd8ed1ab_1
   - contourpy=1.3.1=py310h3788b33_0
   - cycler=0.12.1=pyhd8ed1ab_0
@@ -105,12 +104,10 @@ dependencies:
   - mysql-libs=9.0.1=he0572af_2
   - ncurses=6.5=he02047a_1
   - nest-asyncio=1.6.0=pyhd8ed1ab_1
-  - numpy=1.26.4=py310heeff2f4_0
-  - numpy-base=1.26.4=py310h8a23956_0
+  - openblas=0.3.28=pthreads_h6ec200e_1
   - openjpeg=2.5.2=h488ebb8_0
   - openldap=2.6.9=he970967_0
   - openssl=3.4.1=h7b32b05_0
-  - packaging=24.2=pyhd8ed1ab_2
   - parso=0.8.4=pyhd8ed1ab_1
   - pcre2=10.44=hba22ea6_2
   - pexpect=4.9.0=pyhd8ed1ab_1
@@ -118,7 +115,6 @@ dependencies:
   - pillow=11.0.0=py310hfeaa1f3_0
   - pip=24.3.1=pyh8b19718_0
   - pixman=0.43.2=h59595ed_0
-  - platformdirs=4.3.6=pyhd8ed1ab_1
   - prompt-toolkit=3.0.50=pyha770c72_0
   - pthread-stubs=0.4=hb9d3cd8_1002
   - ptyprocess=0.7.0=pyhd8ed1ab_1
@@ -133,9 +129,7 @@ dependencies:
   - qhull=2020.2=h434a139_5
   - qt6-main=6.8.0=h6e8976b_0
   - readline=8.2=h8228510_1
-  - scipy=1.14.1=py310hfcf56fc_1
   - setuptools=75.6.0=pyhff2d567_1
-  - six=1.16.0=pyhd8ed1ab_1
   - stack_data=0.6.3=pyhd8ed1ab_1
   - tk=8.6.13=noxft_h4845f30_101
   - tornado=6.4.2=py310ha75aee5_0
@@ -176,35 +170,53 @@ dependencies:
   - pip:
       - astropy==6.1.7
       - astropy-iers-data==0.2024.12.2.0.35.34
-      - blosc2==2.7.1
-      - ceci==2.0.1
+      - blosc2==3.9.0
+      - ceci==2.3
+      - certifi==2025.8.3
+      - charset-normalizer==3.4.3
       - click==8.1.7
-      - deprecated==1.2.15
+      - deprecated==1.2.18
       - dill==0.3.9
-      - h5py==3.12.1
+      - h5py==3.13.0
+      - idna==3.10
+      - jinja2==3.1.6
       - joblib==1.4.2
-      - llvmlite==0.43.0
+      - llvmlite==0.45.0
+      - markupsafe==3.0.3
       - mpi4py==4.0.1
       - msgpack==1.1.0
       - multiprocess==0.70.17
-      - ndindex==1.9.2
-      - numba==0.60.0
+      - ndindex==1.10.0
+      - networkx==3.4.2
+      - numba==0.62.1
       - numexpr==2.10.2
-      - pandas==2.2.3
-      - psutil==6.1.0
+      - numpy==2.2.6
+      - packaging==25.0
+      - pandas==2.3.2
+      - platformdirs==4.4.0
+      - psutil==7.1.0
       - py-cpuinfo==9.0.0
       - pyarrow==18.1.0
       - pyerfa==2.0.1.5
       - pytdigest==0.1.4
-      - pytz==2024.2
+      - pytz==2025.2
       - pyyaml==6.0.2
-      - pz-rail-base==1.0.7
-      - qp-prob==0.9.1
+      - pz-rail==1.2.3
+      - pz-rail-base==1.2.8
+      - pz-rail-sompz==0.0.4.dev10+gd7c9d8355.d20250910
+      - qp-prob==1.0.1
+      - requests==2.32.5
+      - ruamel-yaml==0.18.15
+      - ruamel-yaml-clib==0.2.14
       - schwimmbad==0.4.2
       - scikit-learn==1.5.2
+      - scipy==1.15.3
+      - six==1.17.0
       - tables==3.10.1
-      - tables-io==0.9.10
+      - tables-io==1.0.0
       - threadpoolctl==3.5.0
       - tqdm==4.67.1
-      - tzdata==2024.2
+      - typing-extensions==4.15.0
+      - tzdata==2025.2
+      - urllib3==2.5.0
       - wrapt==1.17.0

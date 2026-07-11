@@ -1,5 +1,4 @@
-from rail.core.stage import RailStage
-from rail.core.data import Hdf5Handle, DataStore
+from rail.core.data import TableHandle
 from rail.utils.catalog_utils import CatalogConfigBase
 
 from rail.estimation.algos.sompz import (
@@ -56,43 +55,33 @@ zbins_dz_deep = 0.02
 
 bin_edges_tomo = [0.2, 0.6, 1.2, 1.8, 2.5]
 zbins_min_tomo = 0.0
-zbins_max_tomo = 3.0
-zbins_dz_tomo = 0.025
+zbins_max_tomo = 3.2
+zbins_dz_tomo = 0.02
 
 
 def test_informer_deep(get_data):
     assert get_data == 0
-
-    DS = DataStore()
 
     som_informer_deep = SOMPZInformer.make_stage(
         name="test_informer_deep",
         **som_params_deep,
     )
 
-    input_data_deep = DS.read_file(
-        "input_data_deep",
-        handle_class=Hdf5Handle,
-        path="tests/romandesc_deep_data_37c_noinf.hdf5",
-    )
+    input_data_deep = TableHandle("input_data_deep",
+                                  path="tests/romandesc_deep_data_37c_noinf.hdf5")
     results = som_informer_deep.inform(input_data_deep)
 
 
 def test_informer_wide(get_data):
     assert get_data == 0
 
-    DS = DataStore()
-
     som_informer_wide = SOMPZInformer.make_stage(
         name="test_informer_wide",
         **som_params_wide,
     )
 
-    input_data_wide = DS.read_file(
-        "input_data_wide",
-        handle_class=Hdf5Handle,
-        path="tests/romandesc_wide_data_50c_noinf.hdf5",
-    )
+    input_data_wide = TableHandle("input_data_wide",
+                                  path="tests/romandesc_wide_data_50c_noinf.hdf5")
     results = som_informer_wide.inform(input_data_wide)
 
 
@@ -100,20 +89,14 @@ def test_deepdeep_estimator(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = DataStore()
-
     som_deepdeep_estimator = SOMPZEstimatorDeep.make_stage(
         name="test_deepdeep_estimator",
         model="tests/intermediates/model_som_informer_deep.pkl",
         hdf5_groupname="",
         **som_params_deep,
     )
-
-    input_data_deep = DS.read_file(
-        "input_data_deep",
-        handle_class=Hdf5Handle,
-        path="tests/romandesc_deep_data_37c_noinf.hdf5",
-    )
+    input_data_deep = TableHandle("input_data_deep",
+                                  path="tests/romandesc_deep_data_37c_noinf.hdf5")
     results = som_deepdeep_estimator.estimate(input_data_deep)
 
 
@@ -122,8 +105,6 @@ def test_deepwide_estimator(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = DataStore()
-
     som_deepwide_estimator = SOMPZEstimatorWide.make_stage(
         name="test_deepwide_estimator",
         model="tests/intermediates/model_som_informer_wide.pkl",
@@ -131,11 +112,8 @@ def test_deepwide_estimator(get_data, get_intermediates):
         **som_params_wide,
     )
 
-    input_data_wide = DS.read_file(
-        "input_data_wide",
-        handle_class=Hdf5Handle,
-        path="tests/romandesc_wide_data_50c_noinf.hdf5",
-    )
+    input_data_wide = TableHandle("input_data_wide",
+                                  path="tests/romandesc_wide_data_50c_noinf.hdf5")
     results = som_deepwide_estimator.estimate(input_data_wide)
 
 
@@ -143,8 +121,6 @@ def test_pz_c(get_data, get_intermediates):
 
     assert get_data == 0
     assert get_intermediates == 0
-
-    DS = DataStore()
 
     som_pzc = SOMPZPzc.make_stage(
         name="test_pzc",
@@ -156,17 +132,10 @@ def test_pz_c(get_data, get_intermediates):
         deep_groupname="",
     )
 
-    input_data_spec = DS.read_file(
-        "input_data_spec",
-        handle_class=Hdf5Handle,
-        path="tests/romandesc_spec_data_18c_noinf.hdf5",
-    )
-    cell_deep_spec_data = DS.read_file(
-        "cell_deep_spec_data",
-        handle_class=Hdf5Handle,
-        path="tests/intermediates/assignment_som_deepspec_estimator.hdf5",
-    )
-
+    input_data_spec = TableHandle("input_data_spec",
+                                  path="tests/romandesc_spec_data_18c_noinf.hdf5")
+    cell_deep_spec_data = TableHandle("cell_deep_spec_data",
+                                      path="tests/intermediates/assignment_som_deepspec_estimator.hdf5")
     result = som_pzc.estimate(input_data_spec, cell_deep_spec_data)
 
 
@@ -174,22 +143,14 @@ def test_pc_chat(get_intermediates):
 
     assert get_intermediates == 0
 
-    DS = DataStore()
-
     som_pcchat = SOMPZPc_chat.make_stage(
         name="test_pcchat",
     )
 
-    cell_deep_balrog_data = DS.read_file(
-        "cell_deep_balrog_data",
-        handle_class=Hdf5Handle,
-        path="tests/intermediates/assignment_som_deepdeep_estimator.hdf5",
-    )
-    cell_wide_balrog_data = DS.read_file(
-        "cell_wide_balrog_data",
-        handle_class=Hdf5Handle,
-        path="tests/intermediates/assignment_som_deepwide_estimator.hdf5",
-    )
+    cell_deep_balrog_data = TableHandle("cell_deep_balrog_data",
+                                        path="tests/intermediates/assignment_som_deepdeep_estimator.hdf5")
+    cell_wide_balrog_data = TableHandle("cell_wide_balrog_data",
+                                        path="tests/intermediates/assignment_som_deepwide_estimator.hdf5")
 
     result = som_pcchat.estimate(cell_deep_balrog_data, cell_wide_balrog_data)
 
@@ -198,8 +159,6 @@ def test_pz_chat(get_data, get_intermediates):
 
     assert get_data == 0
     assert get_intermediates == 0
-
-    DS = DataStore()
 
     som_pzchat = SOMPZPzchat.make_stage(
         name="test_pzchat",
@@ -210,27 +169,23 @@ def test_pz_chat(get_data, get_intermediates):
         redshift_col="redshift",
     )
 
-    input_data_spec = DS.read_file(
+    input_data_spec = TableHandle(
         "input_data_spec",
-        handle_class=Hdf5Handle,
         path="tests/romandesc_spec_data_18c_noinf.hdf5",
     )
-    cell_deep_spec_data = DS.read_file(
+    cell_deep_spec_data = TableHandle(
         "cell_deep_spec_data",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/assignment_som_deepspec_estimator.hdf5",
     )
-    cell_wide_wide_data = DS.read_file(
+    cell_wide_wide_data = TableHandle(
         "cell_wide_wide_data",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/assignment_som_widewide_estimator.hdf5",
     )
-    pz_c = DS.read_file(
-        "pz_c", handle_class=Hdf5Handle, path="tests/intermediates/pz_c_som_pzc.hdf5"
+    pz_c = TableHandle(
+        "pz_c", path="tests/intermediates/pz_c_som_pzc.hdf5"
     )
-    pc_chat = DS.read_file(
+    pc_chat = TableHandle(
         "pc_chat",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/pc_chat_som_pcchat.hdf5",
     )
 
@@ -244,8 +199,6 @@ def test_tomo_bin(get_data, get_intermediates):
     assert get_data == 0
     assert get_intermediates == 0
 
-    DS = DataStore()
-
     som_tomobin = SOMPZTomobin.make_stage(
         name="test_tomobin",
         bin_edges=bin_edges_tomo,
@@ -257,24 +210,41 @@ def test_tomo_bin(get_data, get_intermediates):
         redshift_col="redshift",
     )
 
-    input_data_spec = DS.read_file(
+    input_data_spec = TableHandle(
         "input_data_spec",
-        handle_class=Hdf5Handle,
         path="tests/romandesc_spec_data_18c_noinf.hdf5",
     )
-    cell_deep_spec_data = DS.read_file(
+    cell_deep_spec_data = TableHandle(
         "cell_deep_spec_data",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/assignment_som_deepspec_estimator.hdf5",
     )
-    cell_wide_spec_data = DS.read_file(
+    cell_wide_spec_data = TableHandle(
         "cell_wide_spec_data",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/assignment_som_widespec_estimator.hdf5",
     )
+    cell_wide_wide_data = TableHandle(
+        "cel_wide_wide_data",
+        path="tests/intermediates/assignment_som_widewide_estimator.hdf5",
+    )
+    cell_deep_balrog_data = TableHandle("cell_deep_balrog_data",
+                                        path="tests/intermediates/assignment_som_deepdeep_estimator.hdf5")
+    cell_wide_balrog_data = TableHandle("cell_wide_balrog_data",
+                                        path="tests/intermediates/assignment_som_deepwide_estimator.hdf5")
+    balrog_data = TableHandle("balrog_data",
+                              path="tests/romandesc_deep_data_37c_noinf.hdf5")
+    pz_c = TableHandle("pz_c", path="tests/intermediates/pz_c_som_pzc.hdf5")
+    pc_chat = TableHandle("pc_chat", path="tests/intermediates/pc_chat_som_pcchat.hdf5")
 
     result = som_tomobin.estimate(
-        input_data_spec, cell_deep_spec_data, cell_wide_spec_data
+        input_data_spec,
+        cell_deep_spec_data,
+        cell_wide_spec_data,
+        balrog_data,
+        cell_deep_balrog_data,
+        cell_wide_balrog_data,
+        cell_wide_wide_data,
+        pz_c,
+        pc_chat
     )
 
 
@@ -282,8 +252,6 @@ def test_nz(get_data, get_intermediates):
 
     assert get_data == 0
     assert get_intermediates == 0
-
-    DS = DataStore()
 
     som_nz = SOMPZnz.make_stage(
         name="test_nz",
@@ -294,29 +262,24 @@ def test_nz(get_data, get_intermediates):
         redshift_col="redshift",
     )
 
-    input_data_spec = DS.read_file(
+    input_data_spec = TableHandle(
         "input_data_spec",
-        handle_class=Hdf5Handle,
         path="tests/romandesc_spec_data_18c_noinf.hdf5",
     )
-    cell_deep_spec_data = DS.read_file(
+    cell_deep_spec_data = TableHandle(
         "cell_deep_spec_data",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/assignment_som_deepspec_estimator.hdf5",
     )
-    cell_wide_wide_data = DS.read_file(
+    cell_wide_wide_data = TableHandle(
         "cell_wide_wide_data",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/assignment_som_widewide_estimator.hdf5",
     )
-    tomo_bins_wide = DS.read_file(
+    tomo_bins_wide = TableHandle(
         "tomo_bins_wide",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/tomo_bins_wide_som_tomobin.hdf5",
     )
-    pc_chat = DS.read_file(
+    pc_chat = TableHandle(
         "pc_chat",
-        handle_class=Hdf5Handle,
         path="tests/intermediates/pc_chat_som_pcchat.hdf5",
     )
 
