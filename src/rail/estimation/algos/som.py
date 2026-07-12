@@ -759,13 +759,28 @@ def somDomainColors(som, zp=30.,
     pl.colorbar(im, ax=ax[1, 1])
     return fig
 
-def somDomainColorsnok(som, zp=30.):  # pragma: no cover
+def somDomainColorsnok(som, zp=30., index_mag=3):  # pragma: no cover
     # Make 4-panel plot colors and mag across SOM space
     mags = zp - 2.5 * np.log10(som.weights)
-    ug = mags[:, 0] - mags[:, 1]
-    gi = mags[:, 1] - mags[:, 3]
-    iy = mags[:, 3] - mags[:, 5]
-    imag = mags[:, 3]
+
+    try:
+        ug = mags[:, 0] - mags[:, 1]
+    except:
+        ug = np.zeros_like(mags[:, 0])
+    try:
+        gi = mags[:, 1] - mags[:, 3]
+    except:
+        gi = np.zeros_like(mags[:, 1])
+    try:
+        iy = mags[:, 3] - mags[:, 5]
+    except Exception as e:
+        iy = np.zeros_like(mags[:, 3])
+        print(f"Warning: plotting error in somDomainColorsnok: {e}")
+    try:
+        imag = mags[:, index_mag]
+    except:
+        imag = np.zeros_like(mags[:, index_mag])
+        
     fig = pl.figure(figsize=(10, 9))
 
     fig, ax = pl.subplots(nrows=2, ncols=2, figsize=(8, 8))

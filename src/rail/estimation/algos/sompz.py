@@ -813,6 +813,32 @@ def nz_bin_conditioned(wide_data, spec_data, overlap_weighted_pchat, overlap_wei
 
     return nz[0]
 
+def pileup(hists, zbins, zmids, z_pileup, dz, weight): # , nbins
+    """Cuts off z, zmid and Nz at a pileup-z; stack tail on pileup-z and renormalize"""
+    ## Pile up very high z in last bin
+    hists_piled = np.copy(hists)
+    zbegin = int(z_pileup/dz)
+    nbins, nhistbins = hists.shape
+    # print("Dz, new-end-z,weight: ", dz, z_pileup,weight)
+
+    for b in range(nbins):
+        s = np.sum(hists[b,zbegin:])
+        hists_piled[b,zbegin-1] += s*weight
+        hists_piled[b,zbegin:] = 0.
+
+    # make shorter arrays ending at pile-up value
+    # zbins_piled = zbins[:zbegin+1]
+    # zmids_piled = zmids[:zbegin]
+    # hists_piled = hists_piled[:,:zbegin]
+    # preserve arrays with original bins
+    zbins_piled = zbins
+    zmids_piled = zmids
+
+    for b in range(nbins):
+        hists_piled[b,:] = hists_piled[b,:]/np.sum(hists_piled[b,:]*dz)
+    
+    return zbins_piled, zmids_piled, hists_piled
+
 def tomo_bins_wide_2d(tomo_bins_wide_dict):
     tomo_bins_wide = tomo_bins_wide_dict.copy()
     for k in tomo_bins_wide:
@@ -1620,6 +1646,8 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
     config_options = CatEstimator.config_options.copy()
     config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
                           redshift_col=SOMPZ_REDSHIFT_COL_PARAM,
+                          make_equal_occ_bins=Param(bool, False, msg="if True, make equal occupation bins"),
+                          n_equal_occ_bins=Param(int, 5, msg="number of equal occupation bins"),
                           bin_edges=Param(list, default_bin_edges, msg="list of edges of tomo bins"),
                           zbins_min=Param(float, 0.0, msg="minimum redshift for output grid"),
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
@@ -1645,7 +1673,7 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         # check on bands, errs, and prior band
 
     def run(self):
-        spec_data = self.get_data('spec_data')
+        # spec_data = self.get_data('spec_data')
         balrog_data = self.get_data('balrog_data')
         cell_deep_spec_data = self.get_data('cell_deep_spec_data')
         # cell_wide_spec_data = self.get_data('cell_wide_spec_data')
@@ -1666,40 +1694,55 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         meanz_c = np.array([get_mean(zmids, pz_c[i]) for i in range(len(pz_c))])
         order_by_meanz_c = np.argsort(meanz_c)
 
-        # construct bins to yield equal counts of WL sample galaxies
+        # compute cell occupation counts
         assignments = cell_deep_balrog_data['cells']
         weights = get_cell_weights_np(assignments, balrog_data, n_cells, 
-                                      overlap_weighted=overlap_weighted)
+                                    overlap_weighted=overlap_weighted)
         # cells, weights = get_cell_weights(balrog_data, overlap_weighted, key)
         cell_counts = weights[:, 0]
 
-        ngal = cell_counts.sum()
-        nbins = len(bin_edges) - 1
-        target_per_bin = ngal / nbins
-
-        # iterate over cells in order of increasing <z|c>, split when cumulative count reaches each target
-        occupied_cells = order_by_meanz_c[cell_counts[order_by_meanz_c] > 0]
-        cumsum = np.cumsum(cell_counts[occupied_cells])
-        split_at = [
-            np.searchsorted(cumsum, (b + 1) * target_per_bin, side='right')
-            for b in range(nbins - 1)
-        ]
-
+        # dict to store the mapping of wide SOM cells to tomographic bins
+        if self.config.make_equal_occ_bins:
+            nbins = self.config.n_equal_occ_bins
+        else:
+            nbins = len(bin_edges) - 1
         cells_by_bin = []
-        start = 0
-        for stop in split_at + [len(occupied_cells)]:
-            cells_by_bin.append(occupied_cells[start:stop])
-            start = stop
-
-        # convert cells_by_bin into dict as used in the two SOM mode
         tomo_bins_mapping = {}
-        for i in range(len(cells_by_bin)):
-            tomo_bins_mapping[i] = cells_by_bin[i]
+        # construct bins to yield equal counts of WL sample galaxies (here called 'balrog_data' for one SOM setup)
+        if self.config.make_equal_occ_bins:
+            print(f"Making {self.config.n_equal_occ_bins} equal occupation bins")
+            ngal = cell_counts.sum()
+            target_per_bin = ngal / nbins
 
-        # tomo_bins_mapping = -1 * np.ones((self.wide_som_size, 2))
-        # for key in tomo_bins_wide:
-        #     tomo_bins_mapping[tomo_bins_wide[key][:, 0].astype(int), 0] = key
-        #     tomo_bins_mapping[tomo_bins_wide[key][:, 0].astype(int), 1] = tomo_bins_wide[key][:, 1]
+            # iterate over cells in order of increasing <z|c>, split when cumulative count reaches each target
+            occupied_cells = order_by_meanz_c[cell_counts[order_by_meanz_c] > 0]
+            cumsum = np.cumsum(cell_counts[occupied_cells])
+            split_at = [
+                np.searchsorted(cumsum, (b + 1) * target_per_bin, side='right')
+                for b in range(nbins - 1)
+            ]
+
+            start = 0
+            for stop in split_at + [len(occupied_cells)]:
+                cells_by_bin.append(occupied_cells[start:stop])
+                start = stop
+
+            for i in range(len(cells_by_bin)):
+                tomo_bins_mapping[i] = cells_by_bin[i]
+        else:
+            print(f"Using bins with edges {bin_edges}")
+            for i in range(len(bin_edges)-1):
+                # find cells with mean between bin_edges[i] and bin_edges[i+1]
+                cells_by_bin.append(np.where((meanz_c > bin_edges[i]) & (meanz_c < bin_edges[i+1]))[0])
+
+            for i in range(len(cells_by_bin)):
+                tomo_bins_mapping[i] = cells_by_bin[i]
+
+        tomo_bins_output = -1 * np.ones((self.deep_som_size, 2))
+        for tomo_bin_idx, cells in tomo_bins_mapping.items():
+            cells = np.asarray(cells, dtype=np.int64)
+            tomo_bins_output[cells, 0] = tomo_bin_idx
+            tomo_bins_output[cells, 1] = 1.0 # tomo_bins_mapping[key][:, 1]
         # # self.add_data('tomo_bins_deep', dict(tomo_bins_deep=tomo_bins_deep_mapping))
         self.add_data('tomo_bins_wide', dict(tomo_bins_wide=tomo_bins_mapping))
 
@@ -1716,13 +1759,13 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         nz = np.zeros((nbins, len(zmids)))
         for i in range(nbins):
             cells_i = cells_by_bin[i]
-            bin_ngal = cell_counts[cells_i].sum()
+            # bin_ngal = cell_counts[cells_i].sum()
             nz[i, :] = np.sum(pz_c[cells_i] * weights[cells_i], axis=0)
-            print(
-                f"Bin {i}: {len(cells_i)} cells, {bin_ngal:.0f} galaxies "
-                f"(target {target_per_bin:.0f}, <z|c> range "
-                f"{meanz_c[cells_i].min():.3f}–{meanz_c[cells_i].max():.3f})"
-            )
+            # print(
+            #     f"Bin {i}: {len(cells_i)} cells, {bin_ngal:.0f} galaxies "
+            #     f"(target {target_per_bin:.0f}, <z|c> range "
+            #     f"{meanz_c[cells_i].min():.3f}–{meanz_c[cells_i].max():.3f})"
+            # )
 
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=zmids, yvals=nz))
         self.add_data('nz', tomo_ens)
@@ -1887,6 +1930,7 @@ class SOMPZnz(CatEstimator):
                           overlap_weighted_pchat=Param(bool, False, msg="if True, use overlap_weight for p(chat)"),
                           overlap_weighted_pzc=Param(bool, False, msg="if True, use overlap_weight for p(z|c)"),
                           use_bin_conditioning=Param(bool, False, msg="if True, make bin-conditioned n(z)"),
+                          pileup_value=Param(float, 6.0, msg="value to use for pileup"),
                           )
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
@@ -1952,7 +1996,12 @@ class SOMPZnz(CatEstimator):
                                              key=key,
                                              force_assignment=False,
                                              cell_key='cell_wide')
+        
         self.bincents = 0.5 * (zbins[1:] + zbins[:-1])
+
+        if self.config.pileup_value < self.config.zbins_max:
+            _, _, nz = pileup(nz, zbins, self.bincents, self.config.pileup_value, self.config.zbins_dz, weight=1)
+        
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
 
