@@ -274,7 +274,7 @@ class NoiseSOM:
         Also returns a vector of the distance^2 to each BMU.
         """
         # Break the inputs into chunks for speed
-        blocksize = 100
+        blocksize = 1000
         nPts = data.shape[0]
         bmu = np.zeros(nPts, dtype=int)
         dsq = np.zeros(nPts, dtype=float)
@@ -447,9 +447,7 @@ class AsinhMetric:
 
         # Consider a range of rescaling options for the cells
         # and return the one with least distance.
-        # Break the cells into bunches to avoid super-large 4d arrays
 
-        chunk = max(1, cells.shape[0] // 512)
         # df is the asinh of the galaxy S/N values
         # df: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{ib}
         df = np.arcsinh(vf)
