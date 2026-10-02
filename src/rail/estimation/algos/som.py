@@ -22,36 +22,44 @@ def parallel_dsq(vn, s, w, df, h, sPenalty):
     # the core routine indexes s/sPenalty by scale explicitly rather than
     # relying on numpy broadcasting (numba's parfor broadcast inference is
     # unreliable across mixed-rank arrays).
-    dsq0 = parallel_dsq_core(vn, np.ascontiguousarray(s.reshape(-1)), w, df, h,
-                              np.ascontiguousarray(sPenalty.reshape(-1)))
-    return np.min(dsq0, axis=0)
+    return parallel_dsq_core(np.ascontiguousarray(vn),
+                             np.ascontiguousarray(s.reshape(-1)),
+                             np.ascontiguousarray(w),
+                             np.ascontiguousarray(df),
+                             np.ascontiguousarray(h),
+                             np.ascontiguousarray(sPenalty.reshape(-1)))
 
-@numba.njit(parallel=True)
+@numba.njit(parallel=True, fastmath={'contract', 'reassoc', 'arcp'})
 def parallel_dsq_core(vn, s, w, df, h, sPenalty):
     # vn: (nCells,nTargets,nFeatures), s/sPenalty: (nS,), w/df/h: (nTargets,nFeatures)
+    # Returns (nCells,nTargets): min over scales of the distance-sq.
     nCells, nTargets, nFeatures = vn.shape
     nS = s.shape[0]
-    dsq0 = np.empty((nS, nCells, nTargets))
-    for si in numba.prange(nS):
-        ss = s[si]
-        pen = sPenalty[si]
-        for ci in range(nCells):
-            for ti in range(nTargets):
+    lnS = np.log(s)
+    # Per (target,feature) constants: 1/(1+w) and w/(1+w)
+    inv = 1.0 / (1.0 + w)
+    winv = w * inv
+    out = np.empty((nCells, nTargets))
+    for ci in numba.prange(nCells):
+        lv = np.empty(nFeatures)
+        for ti in range(nTargets):
+            # log(2 s vn) = log(2 vn) + log(s): hoist the log out of the scale loop
+            for fi in range(nFeatures):
+                lv[fi] = np.log(2.0 * vn[ci, ti, fi])
+            best = np.inf
+            for si in range(nS):
+                ss = s[si]
                 acc = 0.0
                 for fi in range(nFeatures):
-                    # vnS: see the paragraph containing equation A7 of Sanchez+2020
-                    vnS = ss * vn[ci, ti, fi]
-                    # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
-                    dn = np.arcsinh(vnS)
-                    wv = w[ti, fi]
-                    # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
-                    numerator = dn + wv * np.log(2 * vnS)
-                    dn2 = numerator / (1 + wv)
-                    d = (dn2 - df[ti, fi]) * h[ti, fi]
+                    # Eqn A6 of Sanchez+2020
+                    a = np.arcsinh(ss * vn[ci, ti, fi]) * inv[ti, fi]
+                    d = (a + winv[ti, fi] * (lv[fi] + lnS[si]) - df[ti, fi]) * h[ti, fi]
                     acc += d * d
-                # acc is distance-sq summed over features; add scale penalty
-                dsq0[si, ci, ti] = acc + pen
-    return dsq0
+                acc += sPenalty[si]
+                if acc < best:
+                    best = acc
+            out[ci, ti] = best
+    return out
 
 class NoiseSOM:
     """Class to build a SOM that deals with noisy data."""
@@ -442,8 +450,6 @@ class AsinhMetric:
         # Break the cells into bunches to avoid super-large 4d arrays
 
         chunk = max(1, cells.shape[0] // 512)
-        # dsq is the destination array for the results (distance-squared)
-        dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
         # df is the asinh of the galaxy S/N values
         # df: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{ib}
         df = np.arcsinh(vf)
