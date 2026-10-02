@@ -12,6 +12,7 @@ from rail.utils.path_utils import RAILDIR
 from rail.utils.testing_utils import one_algo
 from rail.estimation.algos import sompz
 from rail.sompz.utils import RAIL_SOMPZ_DIR
+from rail.estimation.algos.som import parallel_dsq
 
 import scipy.special
 sci_ver_str = scipy.__version__.split('.')
@@ -85,3 +86,51 @@ def test_sompz(inputdata, groupname):
     assert np.isclose(results.ancil['zmode'], zb_expected).all()
     assert np.isclose(results.ancil['zmode'], rerun_results.ancil['zmode']).all()
     """
+
+
+def old_bottleneck(w, vnS):  # pragma: no cover
+            # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
+            dn = np.arcsinh(vnS)
+            # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
+            numerator = dn + w * np.log(2 * vnS)
+            return numerator, dn
+
+def old_parallel_dsq(vn, s, w, df, h, sPenalty):
+            # vnS is the re-scaled S/N of the cells, shape=(nS,nCells,nTargets,nFeatures)
+            # vnS: see the paragraph containing equation A7 of Sanchez+2020
+            vnS = s*vn
+            numerator, dn = bottleneck(w, vnS)
+
+            # dn is the asinh of the cell S/N values
+            ####
+            if np.any(np.isinf(numerator)):  # pragma: no cover
+                #pdb.set_trace()
+                print("inf numerator at: ", np.where(np.isinf(numerator)))
+                print(np.any(np.isinf(w)),
+                      np.any(np.isinf(vnS)),
+                      np.any(np.isinf(dn)),
+                      np.any(vnS <= 0))
+            if np.any(np.isnan(numerator)):  # pragma: no cover
+                #pdb.set_trace()
+                print("nan numerator at: ", np.where(np.isnan(numerator)))
+                print(f"found nan in: w={np.any(np.isnan(w))}, vnS={np.any(np.isnan(vnS))}, dn={np.any(np.isnan(dn))}; vnS <= 0={np.any(vnS <= 0)}")
+
+            dn = numerator / (1 + w)
+            d = (dn - df) * h
+            dsq0 = np.sum(d * d, axis=3)  # Sum distance over features
+            # Now add penalty for the scaling factor
+            dsq0 +=  sPenalty
+            # Take minimum distance of all scaling factors
+            return np.min(dsq0, axis=0)
+
+def test_new_dsq():
+    vn = np.random.uniform((1024, 1, 3))
+    s = np.random.uniform((41, 1, 1, 1))
+    w = np.random.uniform((1, 3))
+    df = np.random.uniform((1, 3))
+    h = np.random.uniform((1, 3))
+    sPenalty = np.random.uniform((41, 1, 1))
+
+    # old_result = old_parallel_dsq(vn, s, w, df, h, sPenalty)
+    new_result = parallel_dsq(vn, s, w, df, h, sPenalty)
+    # assert np.allclose(old_result, new_result)
