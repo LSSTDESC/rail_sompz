@@ -126,6 +126,8 @@ def old_parallel_dsq(vn, s, w, df, h, sPenalty):
             return np.min(dsq0, axis=0)
 
 def test_new_dsq():
+    # compare the old and new implementations to ensure
+    # they give the same result
     vn = np.random.uniform(size=(1024, 1, 3))
     s = np.random.uniform(size=(41, 1, 1, 1))
     w = np.random.uniform(size=(1, 3))
