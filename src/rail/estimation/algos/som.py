@@ -410,12 +410,12 @@ class AsinhMetric:
         return
 
     def __call__(self, cells, features, errors):
-        # if len(cells.shape) != 2:  # pragma: no cover
-        #     raise ValueError('Metric cells is wrong dimension')
-        # if features.shape != errors.shape:  # pragma: no cover
-        #     raise ValueError('Metric features and errors do not match')
-        # if cells.shape[-1] != features.shape[-1]:  # pragma: no cover
-        #     raise ValueError('Metric cells and features have mismatched no. of features')
+        if len(cells.shape) != 2:  # pragma: no cover
+            raise ValueError('Metric cells is wrong dimension')
+        if features.shape != errors.shape:  # pragma: no cover
+            raise ValueError('Metric features and errors do not match')
+        if cells.shape[-1] != features.shape[-1]:  # pragma: no cover
+            raise ValueError('Metric cells and features have mismatched no. of features')
         if len(features.shape) == 1:
             vf = (features / errors).reshape(1, features.shape[0])
             ee = errors.reshape(vf.shape)
