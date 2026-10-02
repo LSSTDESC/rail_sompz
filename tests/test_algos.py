@@ -88,6 +88,8 @@ def test_sompz(inputdata, groupname):
     """
 
 
+
+# This is the old parallel_dsq code
 def old_bottleneck(w, vnS):  # pragma: no cover
             # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
             dn = np.arcsinh(vnS)
@@ -99,7 +101,7 @@ def old_parallel_dsq(vn, s, w, df, h, sPenalty):
             # vnS is the re-scaled S/N of the cells, shape=(nS,nCells,nTargets,nFeatures)
             # vnS: see the paragraph containing equation A7 of Sanchez+2020
             vnS = s*vn
-            numerator, dn = bottleneck(w, vnS)
+            numerator, dn = old_bottleneck(w, vnS)
 
             # dn is the asinh of the cell S/N values
             ####
@@ -124,13 +126,13 @@ def old_parallel_dsq(vn, s, w, df, h, sPenalty):
             return np.min(dsq0, axis=0)
 
 def test_new_dsq():
-    vn = np.random.uniform((1024, 1, 3))
-    s = np.random.uniform((41, 1, 1, 1))
-    w = np.random.uniform((1, 3))
-    df = np.random.uniform((1, 3))
-    h = np.random.uniform((1, 3))
-    sPenalty = np.random.uniform((41, 1, 1))
+    vn = np.random.uniform(size=(1024, 1, 3))
+    s = np.random.uniform(size=(41, 1, 1, 1))
+    w = np.random.uniform(size=(1, 3))
+    df = np.random.uniform(size=(1, 3))
+    h = np.random.uniform(size=(1, 3))
+    sPenalty = np.random.uniform(size=(41, 1, 1))
 
-    # old_result = old_parallel_dsq(vn, s, w, df, h, sPenalty)
+    old_result = old_parallel_dsq(vn, s, w, df, h, sPenalty)
     new_result = parallel_dsq(vn, s, w, df, h, sPenalty)
-    # assert np.allclose(old_result, new_result)
+    assert np.allclose(old_result, new_result)
