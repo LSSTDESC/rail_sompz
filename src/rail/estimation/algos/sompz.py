@@ -1665,8 +1665,16 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         super().__init__(args, **kwargs)
         # check on bands, errs, and prior band
 
-    def make_equal_occupation_bins(self):
-        raise NotImplementedError("This is not finished - we need to do a preliminary pass through the data")
+    def make_equal_occupation_bins(self, nbins, order_by_meanz_c, assignments, n_cells, overlap_weighted):
+        # Because I'm not using it yet I haven't tried to write this in a memory-friendly
+        # way, it's just the original version, moved into here. That does mean we reload
+        # the data.
+
+        deep_data = self.get_data('balrog_data')
+        length = len(list(deep_data.values())[0])
+        deep_data_iter = [(0, length, deep_data)]
+        it = get_cell_weights_np_iter(assignments, deep_data_iter, n_cells, overlap_weighted=overlap_weighted)
+        weights = next(it)
         cell_counts = weights[:, 0]
         cells_by_bin = []
         tomo_bins_mapping = {}
@@ -1718,7 +1726,7 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         # construct bins to yield equal counts of WL sample galaxies (here called 'balrog_data' for one SOM setup)
         if self.config.make_equal_occ_bins:
             nbins = self.config.n_equal_occ_bins
-            tomo_bins_mapping, cells_by_bin = self.make_equal_occupation_bins()
+            tomo_bins_mapping, cells_by_bin = self.make_equal_occupation_bins(nbins, order_by_meanz_c, assignments, n_cells, overlap_weighted)
 
         else:
             nbins = len(bin_edges) - 1
