@@ -421,12 +421,12 @@ def get_cell_weights_np_iter(deep_assignment, deep_data_iter, n_cells,
             else:
                 key_tmp = list(deep_data.keys())[0]
                 weights[cell] += len(deep_data[key_tmp][sel])
-        yield weights[:, np.newaxis]
+        # yield weights[:, np.newaxis]
 
     # # convert to shape to be multiplied with pz_c
     # weights = weights[:, np.newaxis]
     
-    return weights
+    return weights[:, np.newaxis]
 
 def get_cell_weights(data, overlap_weighted, key):
     """Given data, get cell weights and indices
@@ -1670,11 +1670,13 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         # way, it's just the original version, moved into here. That does mean we reload
         # the data.
 
+        # This also doesn't work if you have set balrog_groupname. Apparently get_data doesn't
+        # allow you to use group names?
+
         deep_data = self.get_data('balrog_data')
         length = len(list(deep_data.values())[0])
         deep_data_iter = [(0, length, deep_data)]
-        it = get_cell_weights_np_iter(assignments, deep_data_iter, n_cells, overlap_weighted=overlap_weighted)
-        weights = next(it)
+        weights = get_cell_weights_np_iter(assignments, deep_data_iter, n_cells, overlap_weighted=overlap_weighted)
         cell_counts = weights[:, 0]
         cells_by_bin = []
         tomo_bins_mapping = {}
@@ -1767,11 +1769,11 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         # sum cells to construct n(z)
         balrog_data_it = self.input_iterator("balrog_data", groupname=self.config["balrog_groupname"])
 
-        for weights in get_cell_weights_np_iter(assignments, balrog_data_it, n_cells, 
-                                    overlap_weighted=overlap_weighted):
-            for i in range(nbins):
-                cells_i = cells_by_bin[i]
-                nz[i, :] += np.sum(pz_c[cells_i] * weights[cells_i], axis=0)
+        weights = get_cell_weights_np_iter(assignments, balrog_data_it, n_cells, 
+                                    overlap_weighted=overlap_weighted)
+        for i in range(nbins):
+            cells_i = cells_by_bin[i]
+            nz[i, :] += np.sum(pz_c[cells_i] * weights[cells_i], axis=0)
 
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=zmids, yvals=nz))
         self.add_data('nz', tomo_ens)
