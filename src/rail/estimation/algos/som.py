@@ -11,40 +11,55 @@ from itertools import starmap
 # import cmasher as cmr
 @numba.njit
 def bottleneck(w, vnS):  # pragma: no cover
-            # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
-            dn = np.arcsinh(vnS)
-            # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
-            numerator = dn + w * np.log(2 * vnS)
-            return numerator, dn
+    # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
+    dn = np.arcsinh(vnS)
+    # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
+    numerator = dn + w * np.log(2 * vnS)
+    return numerator, dn
 
 def parallel_dsq(vn, s, w, df, h, sPenalty):
-            # vnS is the re-scaled S/N of the cells, shape=(nS,nCells,nTargets,nFeatures)
-            # vnS: see the paragraph containing equation A7 of Sanchez+2020
-            vnS = s*vn
-            numerator, dn = bottleneck(w, vnS)
+    # Flatten the broadcast-helper (nS,1,1,...) / (nS,1,1) arrays down to 1d:
+    # the core routine indexes s/sPenalty by scale explicitly rather than
+    # relying on numpy broadcasting (numba's parfor broadcast inference is
+    # unreliable across mixed-rank arrays).
+    return parallel_dsq_core(np.ascontiguousarray(vn),
+                             np.ascontiguousarray(s.reshape(-1)),
+                             np.ascontiguousarray(w),
+                             np.ascontiguousarray(df),
+                             np.ascontiguousarray(h),
+                             np.ascontiguousarray(sPenalty.reshape(-1)))
 
-            # dn is the asinh of the cell S/N values
-            ####
-            if np.any(np.isinf(numerator)):  # pragma: no cover
-                #pdb.set_trace()
-                print("inf numerator at: ", np.where(np.isinf(numerator)))
-                print(np.any(np.isinf(w)),
-                      np.any(np.isinf(vnS)),
-                      np.any(np.isinf(dn)),
-                      np.any(vnS <= 0))
-            if np.any(np.isnan(numerator)):  # pragma: no cover
-                #pdb.set_trace()
-                print("nan numerator at: ", np.where(np.isnan(numerator)))
-                print(f"found nan in: w={np.any(np.isnan(w))}, vnS={np.any(np.isnan(vnS))}, dn={np.any(np.isnan(dn))}; vnS <= 0={np.any(vnS <= 0)}")
-
-            dn = numerator / (1 + w)
-            d = (dn - df) * h
-            dsq0 = np.sum(d * d, axis=3)  # Sum distance over features
-            # Now add penalty for the scaling factor
-            dsq0 +=  sPenalty
-            # Take minimum distance of all scaling factors
-            return np.min(dsq0, axis=0)
-
+@numba.njit(parallel=True, fastmath={'contract', 'reassoc', 'arcp'})
+def parallel_dsq_core(vn, s, w, df, h, sPenalty):
+    # vn: (nCells,nTargets,nFeatures), s/sPenalty: (nS,), w/df/h: (nTargets,nFeatures)
+    # Returns (nCells,nTargets): min over scales of the distance-sq.
+    nCells, nTargets, nFeatures = vn.shape
+    nS = s.shape[0]
+    lnS = np.log(s)
+    # Per (target,feature) constants: 1/(1+w) and w/(1+w)
+    inv = 1.0 / (1.0 + w)
+    winv = w * inv
+    out = np.empty((nCells, nTargets))
+    for ci in numba.prange(nCells):
+        lv = np.empty(nFeatures)
+        for ti in range(nTargets):
+            # log(2 s vn) = log(2 vn) + log(s): hoist the log out of the scale loop
+            for fi in range(nFeatures):
+                lv[fi] = np.log(2.0 * vn[ci, ti, fi])
+            best = np.inf
+            for si in range(nS):
+                ss = s[si]
+                acc = 0.0
+                for fi in range(nFeatures):
+                    # Eqn A6 of Sanchez+2020
+                    a = np.arcsinh(ss * vn[ci, ti, fi]) * inv[ti, fi]
+                    d = (a + winv[ti, fi] * (lv[fi] + lnS[si]) - df[ti, fi]) * h[ti, fi]
+                    acc += d * d
+                acc += sPenalty[si]
+                if acc < best:
+                    best = acc
+            out[ci, ti] = best
+    return out
 
 class NoiseSOM:
     """Class to build a SOM that deals with noisy data."""
@@ -60,7 +75,7 @@ class NoiseSOM:
                  logF=True,
                  initialize='uniform',
                  gridOverDimensions=None,
-                 pool=None):
+                 ):
         """ Build a new SOM
 
         Parameters
@@ -223,7 +238,7 @@ class NoiseSOM:
             # Calculate p , get BMU
             dd = data[order[i]]
             err = ee[order[i]]
-            bmu = self.getBMU(dd, err, pool)
+            bmu = self.getBMU(dd, err)
 
             # Get the learning function values
             fLearn = learning(xy, shape=self.shape, wrap=self.wrap, bmu=bmu, iteration=i)
@@ -238,20 +253,20 @@ class NoiseSOM:
 
         return
 
-    def chisq(self, data, errors, pool):
+    def chisq(self, data, errors):
         """
         Return (flattened) array of -2 ln(probabilities) for each cell,
         i.e. distance-squared.
         """
 
-        return self.metric(self.weights, data, errors, pool)
+        return self.metric(self.weights, data, errors)
 
-    def getBMU(self, data, errors, pool):
+    def getBMU(self, data, errors):
         """
         Assign a feature vector to a cell with maximum probability.
         Returns flattened index of BMU.
         """
-        return np.argmin(self.chisq(data, errors, pool))
+        return np.argmin(self.chisq(data, errors))
 
     def classify(self, data, errors):
         """
@@ -259,7 +274,7 @@ class NoiseSOM:
         Also returns a vector of the distance^2 to each BMU.
         """
         # Break the inputs into chunks for speed
-        blocksize = 100
+        blocksize = 1000
         nPts = data.shape[0]
         bmu = np.zeros(nPts, dtype=int)
         dsq = np.zeros(nPts, dtype=float)
@@ -402,7 +417,7 @@ class AsinhMetric:
             self.sPenalty = self.s * 0.
         return
 
-    def __call__(self, cells, features, errors, pool=None):
+    def __call__(self, cells, features, errors):
         if len(cells.shape) != 2:  # pragma: no cover
             raise ValueError('Metric cells is wrong dimension')
         if features.shape != errors.shape:  # pragma: no cover
@@ -432,16 +447,7 @@ class AsinhMetric:
 
         # Consider a range of rescaling options for the cells
         # and return the one with least distance.
-        # Break the cells into bunches to avoid super-large 4d arrays
 
-        if pool is not None:
-            chunk = int(pool[1])
-        else:
-            # When running serially (no pool), use fewer larger chunks to
-            # reduce Python function-call overhead while keeping memory bounded.
-            chunk = max(1, cells.shape[0] // 512)
-        # dsq is the destination array for the results (distance-squared)
-        dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
         # df is the asinh of the galaxy S/N values
         # df: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{ib}
         df = np.arcsinh(vf)
@@ -461,13 +467,7 @@ class AsinhMetric:
         h = np.hypot(1, vf)
         s = self.s[:, np.newaxis, np.newaxis, np.newaxis]
         sPenalty = self.sPenalty[:, np.newaxis, np.newaxis]
-        vnlist =  np.array_split(vn, chunk)
-        args = [(_, s, w, df, h, sPenalty) for _ in vnlist]
-        if pool is not None:
-            dsq_list = pool[0].starmap(parallel_dsq, args)
-        else:
-            dsq_list = list(starmap(parallel_dsq, args))
-        dsq = np.vstack(dsq_list)
+        dsq = parallel_dsq(vn, s, w, df, h, sPenalty)
 
         return dsq
 
