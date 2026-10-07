@@ -399,28 +399,32 @@ def redshift_distributions_wide(data,
         hists = np.array(hists)
         return hists
 
-def get_cell_weights_np(deep_assignment, deep_data, n_cells,
+def get_cell_weights_np_iter(deep_assignment, deep_data_iter, n_cells,
                         overlap_weighted=False):
     # TODO: implement single get_cell_weights function instead of using this one and get_cell_weights 
     # in different contexts
 
-    # get weight based on cell occupation
+    # get weight based on cell 
+    sz = deep_assignment.size
     cells, cell_counts = np.unique(deep_assignment, return_counts=True)
     weights = np.zeros(n_cells)
     # weights[cells] = cell_counts[cells]  # old weighting based on cell occupation
 
     # get weights from column
-    for cell in cells:
-        sel = (deep_assignment == cell)
-        # weights[cell] = np.sum(deep_data['i_hsmshaperegauss_derived_weight'][sel])
-        if overlap_weighted:
-            weights[cell] = np.sum(deep_data['overlap_weight'][sel])
-        else:
-            key_tmp = list(deep_data.keys())[0]
-            weights[cell] = len(deep_data[key_tmp][sel])
+    for s, e, deep_data in deep_data_iter:
+        print(f"Processing rows {s:,} - {e:,} of {sz:,}")
+        for cell in cells:
+            sel = (deep_assignment[s:e] == cell)
+            # weights[cell] = np.sum(deep_data['i_hsmshaperegauss_derived_weight'][sel])
+            if overlap_weighted:
+                weights[cell] += np.sum(deep_data['overlap_weight'][sel])
+            else:
+                key_tmp = list(deep_data.keys())[0]
+                weights[cell] += len(deep_data[key_tmp][sel])
+        yield weights[:, np.newaxis]
 
-    # convert to shape to be multiplied with pz_c
-    weights = weights[:, np.newaxis]
+    # # convert to shape to be multiplied with pz_c
+    # weights = weights[:, np.newaxis]
     
     return weights
 
@@ -1641,6 +1645,7 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
                           zbins_max=Param(float, 6.0, msg="maximum redshift for output grid"),
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
                           overlap_weighted=Param(bool, False, msg="if True, use overlap_weight when defining tomographic bins"),
+                          balrog_groupname=Param(str, "photometry", msg="HDF5 group name for balrog data"),
                           )
     # by arbitrary convention, use the same variable names as two-som, 
     # with 'deep' as the label for the lensing sample
@@ -1660,9 +1665,34 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         super().__init__(args, **kwargs)
         # check on bands, errs, and prior band
 
+    def make_equal_occupation_bins(self):
+        raise NotImplementedError("This is not finished - we need to do a preliminary pass through the data")
+        cell_counts = weights[:, 0]
+        cells_by_bin = []
+        tomo_bins_mapping = {}
+        print(f"Making {self.config.n_equal_occ_bins} equal occupation bins")
+        ngal = cell_counts.sum()
+        target_per_bin = ngal / nbins
+
+        # iterate over cells in order of increasing <z|c>, split when cumulative count reaches each target
+        occupied_cells = order_by_meanz_c[cell_counts[order_by_meanz_c] > 0]
+        cumsum = np.cumsum(cell_counts[occupied_cells])
+        split_at = [
+            np.searchsorted(cumsum, (b + 1) * target_per_bin, side='right')
+            for b in range(nbins - 1)
+        ]
+
+        start = 0
+        for stop in split_at + [len(occupied_cells)]:
+            cells_by_bin.append(occupied_cells[start:stop])
+            start = stop
+
+        for i in range(len(cells_by_bin)):
+            tomo_bins_mapping[i] = cells_by_bin[i]
+        return tomo_bins_mapping, cells_by_bin
+
     def run(self):
         # spec_data = self.get_data('spec_data')
-        balrog_data = self.get_data('balrog_data')
         cell_deep_spec_data = self.get_data('cell_deep_spec_data')
         # cell_wide_spec_data = self.get_data('cell_wide_spec_data')
         cell_deep_balrog_data = self.get_data('cell_deep_balrog_data')
@@ -1684,40 +1714,16 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
 
         # compute cell occupation counts
         assignments = cell_deep_balrog_data['cells']
-        weights = get_cell_weights_np(assignments, balrog_data, n_cells, 
-                                    overlap_weighted=overlap_weighted)
-        # cells, weights = get_cell_weights(balrog_data, overlap_weighted, key)
-        cell_counts = weights[:, 0]
 
-        # dict to store the mapping of wide SOM cells to tomographic bins
-        if self.config.make_equal_occ_bins:
-            nbins = self.config.n_equal_occ_bins
-        else:
-            nbins = len(bin_edges) - 1
-        cells_by_bin = []
-        tomo_bins_mapping = {}
         # construct bins to yield equal counts of WL sample galaxies (here called 'balrog_data' for one SOM setup)
         if self.config.make_equal_occ_bins:
-            print(f"Making {self.config.n_equal_occ_bins} equal occupation bins")
-            ngal = cell_counts.sum()
-            target_per_bin = ngal / nbins
+            nbins = self.config.n_equal_occ_bins
+            tomo_bins_mapping, cells_by_bin = self.make_equal_occupation_bins()
 
-            # iterate over cells in order of increasing <z|c>, split when cumulative count reaches each target
-            occupied_cells = order_by_meanz_c[cell_counts[order_by_meanz_c] > 0]
-            cumsum = np.cumsum(cell_counts[occupied_cells])
-            split_at = [
-                np.searchsorted(cumsum, (b + 1) * target_per_bin, side='right')
-                for b in range(nbins - 1)
-            ]
-
-            start = 0
-            for stop in split_at + [len(occupied_cells)]:
-                cells_by_bin.append(occupied_cells[start:stop])
-                start = stop
-
-            for i in range(len(cells_by_bin)):
-                tomo_bins_mapping[i] = cells_by_bin[i]
         else:
+            nbins = len(bin_edges) - 1
+            cells_by_bin = []
+            tomo_bins_mapping = {}
             print(f"Using bins with edges {bin_edges}")
             for i in range(len(bin_edges)-1):
                 # find cells with mean between bin_edges[i] and bin_edges[i+1]
@@ -1731,8 +1737,13 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
             cells = np.asarray(cells, dtype=np.int64)
             tomo_bins_output[cells, 0] = tomo_bin_idx
             tomo_bins_output[cells, 1] = 1.0 # tomo_bins_mapping[key][:, 1]
-        # # self.add_data('tomo_bins_deep', dict(tomo_bins_deep=tomo_bins_deep_mapping))
-        self.add_data('tomo_bins_wide', dict(tomo_bins_wide=tomo_bins_mapping))
+
+        # Convert tomo_bins_mapping so that the keys are strings, as required in HDF5 output
+        tomo_bins_mapping_output = {
+            f"bin_{key}": val
+            for key, val in tomo_bins_mapping.items()
+        }
+        self.add_data('tomo_bins_wide', dict(tomo_bins_wide=tomo_bins_mapping_output))
 
         # Per-galaxy tomographic bin from wide SOM cell index (TableHandle columns are arrays).
         lookup = np.full(self.deep_som_size, -1, dtype=np.int64)
@@ -1743,17 +1754,16 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         bhat_for_data = lookup[som_cells]
         self.add_data('bhat_for_wide_data', dict(bhat_for_wide_data=bhat_for_data))
 
-        # sum cells to construct n(z)
         nz = np.zeros((nbins, len(zmids)))
-        for i in range(nbins):
-            cells_i = cells_by_bin[i]
-            # bin_ngal = cell_counts[cells_i].sum()
-            nz[i, :] = np.sum(pz_c[cells_i] * weights[cells_i], axis=0)
-            # print(
-            #     f"Bin {i}: {len(cells_i)} cells, {bin_ngal:.0f} galaxies "
-            #     f"(target {target_per_bin:.0f}, <z|c> range "
-            #     f"{meanz_c[cells_i].min():.3f}–{meanz_c[cells_i].max():.3f})"
-            # )
+
+        # sum cells to construct n(z)
+        balrog_data_it = self.input_iterator("balrog_data", groupname=self.config["balrog_groupname"])
+
+        for weights in get_cell_weights_np_iter(assignments, balrog_data_it, n_cells, 
+                                    overlap_weighted=overlap_weighted):
+            for i in range(nbins):
+                cells_i = cells_by_bin[i]
+                nz[i, :] += np.sum(pz_c[cells_i] * weights[cells_i], axis=0)
 
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=zmids, yvals=nz))
         self.add_data('nz', tomo_ens)
