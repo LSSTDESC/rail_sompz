@@ -1728,7 +1728,7 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
                 start = stop
 
             for i in range(len(cells_by_bin)):
-                tomo_bins_mapping[i] = cells_by_bin[i]
+                tomo_bins_mapping[str(i)] = cells_by_bin[i]
         else:
             print(f"Using bins with edges {bin_edges}")
             for i in range(len(bin_edges)-1):
@@ -1736,7 +1736,7 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
                 cells_by_bin.append(np.where((meanz_c > bin_edges[i]) & (meanz_c < bin_edges[i+1]))[0])
 
             for i in range(len(cells_by_bin)):
-                tomo_bins_mapping[i] = cells_by_bin[i]
+                tomo_bins_mapping[str(i)] = cells_by_bin[i]
 
         tomo_bins_output = -1 * np.ones((self.deep_som_size, 2))
         for tomo_bin_idx, cells in tomo_bins_mapping.items():
