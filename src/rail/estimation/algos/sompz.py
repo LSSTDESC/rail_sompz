@@ -2251,14 +2251,7 @@ class SOMPZEstimatorBase(CatEstimator):
         self.model = None
         self.model = self.open_model(**self.config)  # None
         first = True
-        if self.config.hdf5_groupname:  # pragma: no cover
-            # print(self.config.hdf5_groupname)
-            self.input_iterator('data')
-            iter1 = self.input_iterator('data')[self.config.hdf5_groupname]
-        else:
-            iter1 = self.input_iterator('data')
-        # iter1 = self.input_iterator('data', groupname=self.config.hdf5_groupname)
-        # iter1 = self.input_iterator('data')
+        iter1 = self.input_iterator('data')
         self._output_handle = None
         for s, e, test_data in iter1:
             print(f"Process {self.rank} running creator on chunk {s} - {e}", flush=True)
