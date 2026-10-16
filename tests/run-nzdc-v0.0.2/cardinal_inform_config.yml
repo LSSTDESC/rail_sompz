@@ -1,0 +1,77 @@
+som_deep_informer_big:
+  output_mode: default
+  redshift_col: Z
+  hdf5_groupname: ''
+  nprocess: 32
+  inputs:
+  - mag_u_lsst
+  - mag_g_lsst
+  - mag_r_lsst
+  - mag_i_lsst
+  - mag_z_lsst
+  - mag_Y_roman
+  - mag_J_roman
+  - mag_H_roman
+  input_errs:
+  - mag_u_lsst_err
+  - mag_g_lsst_err
+  - mag_r_lsst_err
+  - mag_i_lsst_err
+  - mag_z_lsst_err
+  - mag_Y_roman_err
+  - mag_J_roman_err
+  - mag_H_roman_err
+  zero_points:
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  som_shape: [32, 32] #[64, 64] # [128, 128]
+  som_minerror: 0.0001
+  som_wrap: false
+  som_take_log: true
+  convert_to_flux: true
+  set_threshold: true
+  thresh_val: 1.0e-05
+  thresh_val_err: 1.0e-05
+  name: som_deep_informer_big
+  model: model_deep.pkl
+  config: null
+som_wide_informer_big:
+  output_mode: default
+  redshift_col: Z
+  hdf5_groupname: ''
+  nprocess: 8
+  inputs:
+  - mag_u_lsst
+  - mag_g_lsst  
+  - mag_r_lsst
+  - mag_i_lsst
+  - mag_z_lsst
+  input_errs:
+  - mag_u_lsst_err
+  - mag_g_lsst_err
+  - mag_r_lsst_err
+  - mag_i_lsst_err
+  - mag_z_lsst_err
+  zero_points:
+  - 30
+  - 30
+  - 30
+  - 30
+  - 30
+  som_shape: [32, 32]
+  som_minerror: 0.0001
+  som_wrap: false
+  som_take_log: true
+  convert_to_flux: true
+  set_threshold: true
+  thresh_val: 1.0e-05
+  thresh_val_err: 1.0e-05
+  name: som_wide_informer_big
+  model: model_wide.pkl
+  config: null

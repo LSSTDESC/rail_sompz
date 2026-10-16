@@ -11,43 +11,47 @@ from itertools import starmap
 # import cmasher as cmr
 @numba.njit
 def bottleneck(w, vnS):  # pragma: no cover
-            # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
-            dn = np.arcsinh(vnS)
-            # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
-            numerator = dn + w * np.log(2 * vnS)
-            return numerator, dn
+    # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
+    dn = np.arcsinh(vnS)
+    # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
+    numerator = dn + w * np.log(2 * vnS)
+    return numerator, dn
 
 def parallel_dsq(vn, s, w, df, h, sPenalty):
-            # vnS is the re-scaled S/N of the cells, shape=(nS,nCells,nTargets,nFeatures)
-            # vnS: see the paragraph containing equation A7 of Sanchez+2020
-            vnS = s*vn
-            numerator, dn = bottleneck(w, vnS)
+    # Flatten the broadcast-helper (nS,1,1,...) / (nS,1,1) arrays down to 1d:
+    # the core routine indexes s/sPenalty by scale explicitly rather than
+    # relying on numpy broadcasting (numba's parfor broadcast inference is
+    # unreliable across mixed-rank arrays).
+    dsq0 = parallel_dsq_core(vn, np.ascontiguousarray(s.reshape(-1)), w, df, h,
+                              np.ascontiguousarray(sPenalty.reshape(-1)))
+    return np.min(dsq0, axis=0)
 
-            # dn is the asinh of the cell S/N values
-            ####
-            if np.any(np.isinf(numerator)):  # pragma: no cover
-                #pdb.set_trace()
-                print("inf numerator at", np.where(np.isinf(numerator)))
-                print(np.any(np.isinf(w)),
-                      np.any(np.isinf(vnS)),
-                      np.any(np.isinf(dn)),
-                      np.any(vnS <= 0))
-            if np.any(np.isnan(numerator)):  # pragma: no cover
-                #pdb.set_trace()
-                print("nan numerator at", np.where(np.isnan(numerator)))
-                print(np.any(np.isnan(w)),
-                      np.any(np.isnan(vnS)),
-                      np.any(np.isnan(dn)),
-                      np.any(vnS <= 0))
-
-            dn = numerator / (1 + w)
-            d = (dn - df) * h
-            dsq0 = np.sum(d * d, axis=3)  # Sum distance over features
-            # Now add penalty for the scaling factor
-            dsq0 +=  sPenalty
-            # Take minimum distance of all scaling factors
-            return np.min(dsq0, axis=0)
-
+@numba.njit(parallel=True)
+def parallel_dsq_core(vn, s, w, df, h, sPenalty):
+    # vn: (nCells,nTargets,nFeatures), s/sPenalty: (nS,), w/df/h: (nTargets,nFeatures)
+    nCells, nTargets, nFeatures = vn.shape
+    nS = s.shape[0]
+    dsq0 = np.empty((nS, nCells, nTargets))
+    for si in numba.prange(nS):
+        ss = s[si]
+        pen = sPenalty[si]
+        for ci in range(nCells):
+            for ti in range(nTargets):
+                acc = 0.0
+                for fi in range(nFeatures):
+                    # vnS: see the paragraph containing equation A7 of Sanchez+2020
+                    vnS = ss * vn[ci, ti, fi]
+                    # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
+                    dn = np.arcsinh(vnS)
+                    wv = w[ti, fi]
+                    # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
+                    numerator = dn + wv * np.log(2 * vnS)
+                    dn2 = numerator / (1 + wv)
+                    d = (dn2 - df[ti, fi]) * h[ti, fi]
+                    acc += d * d
+                # acc is distance-sq summed over features; add scale penalty
+                dsq0[si, ci, ti] = acc + pen
+    return dsq0
 
 class NoiseSOM:
     """Class to build a SOM that deals with noisy data."""
@@ -63,7 +67,7 @@ class NoiseSOM:
                  logF=True,
                  initialize='uniform',
                  gridOverDimensions=None,
-                 pool=None):
+                 ):
         """ Build a new SOM
 
         Parameters
@@ -226,7 +230,7 @@ class NoiseSOM:
             # Calculate p , get BMU
             dd = data[order[i]]
             err = ee[order[i]]
-            bmu = self.getBMU(dd, err, pool)
+            bmu = self.getBMU(dd, err)
 
             # Get the learning function values
             fLearn = learning(xy, shape=self.shape, wrap=self.wrap, bmu=bmu, iteration=i)
@@ -241,20 +245,20 @@ class NoiseSOM:
 
         return
 
-    def chisq(self, data, errors, pool):
+    def chisq(self, data, errors):
         """
         Return (flattened) array of -2 ln(probabilities) for each cell,
         i.e. distance-squared.
         """
 
-        return self.metric(self.weights, data, errors, pool)
+        return self.metric(self.weights, data, errors)
 
-    def getBMU(self, data, errors, pool):
+    def getBMU(self, data, errors):
         """
         Assign a feature vector to a cell with maximum probability.
         Returns flattened index of BMU.
         """
-        return np.argmin(self.chisq(data, errors, pool))
+        return np.argmin(self.chisq(data, errors))
 
     def classify(self, data, errors):
         """
@@ -262,7 +266,7 @@ class NoiseSOM:
         Also returns a vector of the distance^2 to each BMU.
         """
         # Break the inputs into chunks for speed
-        blocksize = 10
+        blocksize = 100
         nPts = data.shape[0]
         bmu = np.zeros(nPts, dtype=int)
         dsq = np.zeros(nPts, dtype=float)
@@ -405,7 +409,7 @@ class AsinhMetric:
             self.sPenalty = self.s * 0.
         return
 
-    def __call__(self, cells, features, errors, pool=None):
+    def __call__(self, cells, features, errors):
         if len(cells.shape) != 2:  # pragma: no cover
             raise ValueError('Metric cells is wrong dimension')
         if features.shape != errors.shape:  # pragma: no cover
@@ -437,10 +441,7 @@ class AsinhMetric:
         # and return the one with least distance.
         # Break the cells into bunches to avoid super-large 4d arrays
 
-        chunk = 512
-        if pool is not None:
-            chunk = pool[1]
-            chunk = int(chunk)
+        chunk = max(1, cells.shape[0] // 512)
         # dsq is the destination array for the results (distance-squared)
         dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
         # df is the asinh of the galaxy S/N values
@@ -449,6 +450,7 @@ class AsinhMetric:
 
         # w is the weight for asinh vs geometric mean metrics
         # w: see Eqn A5 of Sanchez+2020
+        vf = np.clip(vf, a_min=None, a_max=350)
         w = np.minimum(np.exp(2 * (vf - 4)), 1000.)
         if np.any(np.isinf(w)):  # pragma: no cover
             #pdb.set_trace()
@@ -461,13 +463,7 @@ class AsinhMetric:
         h = np.hypot(1, vf)
         s = self.s[:, np.newaxis, np.newaxis, np.newaxis]
         sPenalty = self.sPenalty[:, np.newaxis, np.newaxis]
-        vnlist =  np.array_split(vn, chunk)
-        args = [(_, s, w, df, h, sPenalty) for _ in vnlist]
-        if pool is not None:
-            dsq_list = pool[0].starmap(parallel_dsq, args)
-        else:
-            dsq_list = list(starmap(parallel_dsq, args))
-        dsq = np.vstack(dsq_list)
+        dsq = parallel_dsq(vn, s, w, df, h, sPenalty)
 
         return dsq
 
@@ -619,9 +615,9 @@ def readCOSMOS():  # pragma: no cover
     return fluxes, errors, redshifts, counts, radec
 
 
-def somPlot3d(som, az=200., el=30.):  # pragma: no cover
+def somPlot3d(som, az=200., el=30., zp=30.):  # pragma: no cover
     # Make a 3d plot of cells weights in color space.  az/el are plot view angle
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
     ik = mags[:, 3] - mags[:, 7]
@@ -649,12 +645,12 @@ def somPlot3d(som, az=200., el=30.):  # pragma: no cover
     ax.set_xlabel('gi')
     ax.set_ylabel('ik')
     ax.set_zlabel('imag')
-    return
+    return fig
 
 
-def somPlot2d(som):  # pragma: no cover
+def somPlot2d(som, zp=30.):  # pragma: no cover
     # Make a 2d plot of cells weights in color-color diagram space.
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
     ik = mags[:, 3] - mags[:, 7]
@@ -681,12 +677,12 @@ def somPlot2d(som):  # pragma: no cover
     cb.set_label('imag')
     pl.xlabel('gi')
     pl.ylabel('ik')
-    return
+    return fig
 
 
-def somPlot2dnok(som):  # pragma: no cover
+def somPlot2dnok(som, zp=30.):  # pragma: no cover
     # Make a 2d plot of cells weights in color-color diagram space.
-    mags = 30. - 2.5 * np.log10(som.weights)
+    mags = zp - 2.5 * np.log10(som.weights)
     ug = mags[:, 0] - mags[:, 1]
     gi = mags[:, 1] - mags[:, 3]
     iy = mags[:, 3] - mags[:, 5]
@@ -713,50 +709,74 @@ def somPlot2dnok(som):  # pragma: no cover
     cb.set_label('imag')
     pl.xlabel('gi')
     pl.ylabel('iy')
-    return
+    return fig
 
-def somDomainColors(som):  # pragma: no cover
+def somDomainColors(som, zp=30., 
+                    bands=['u', 'g', 'r', 'i', 'z', 'y', 'J', 'H', 'F'], 
+                    indices = [0, 1, 3, 7],
+                    index_mag = 3):  # pragma: no cover
     # Make 4-panel plot colors and mag across SOM space
-    mags = 30. - 2.5 * np.log10(som.weights)
-    ug = mags[:, 0] - mags[:, 1]
-    gi = mags[:, 1] - mags[:, 3]
-    ik = mags[:, 3] - mags[:, 7]
-    imag = mags[:, 3]
+    mags = zp - 2.5 * np.log10(som.weights)
+
+    indices = sorted(indices)
+    if len(indices) != 4:
+        raise NotImplementedError("Currently only implemented for 3 colors + i mag")
+
+    ug = mags[:, indices[0]] - mags[:, indices[1]]
+    gi = mags[:, indices[1]] - mags[:, indices[2]]
+    ik = mags[:, indices[2]] - mags[:, indices[3]]
+    imag = mags[:, index_mag]
+
     fig = pl.figure(figsize=(6, 7))
 
     fig, ax = pl.subplots(nrows=2, ncols=2, figsize=(8, 8))
     im = ax[0, 0].imshow(gi.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral_r')
-    ax[0, 0].set_title('gi')
+    ax[0, 0].set_title(f'{bands[indices[1]]}{bands[indices[2]]}')
     ax[0, 0].set_aspect('equal')
     pl.colorbar(im, ax=ax[0, 0])
 
     im = ax[1, 0].imshow(ug.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral_r')
-    ax[1, 0].set_title('ug')
+    ax[1, 0].set_title(f'{bands[indices[0]]}{bands[indices[1]]}')
     ax[1, 0].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 0])
 
     im = ax[0, 1].imshow(ik.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral_r')
-    ax[0, 1].set_title('ik')
+    ax[0, 1].set_title(f'{bands[indices[2]]}{bands[indices[3]]}')
     ax[0, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[0, 1])
 
     im = ax[1, 1].imshow(imag.reshape(som.shape), interpolation='nearest', origin='lower',
                          cmap='Spectral')
-    ax[1, 1].set_title('imag')
+    ax[1, 1].set_title(f'{bands[index_mag]} mag')
     ax[1, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 1])
-    return
+    return fig
 
-def somDomainColorsnok(som):  # pragma: no cover
+def somDomainColorsnok(som, zp=30., index_mag=3):  # pragma: no cover
     # Make 4-panel plot colors and mag across SOM space
-    mags = 30. - 2.5 * np.log10(som.weights)
-    ug = mags[:, 0] - mags[:, 1]
-    gi = mags[:, 1] - mags[:, 3]
-    iy = mags[:, 3] - mags[:, 5]
-    imag = mags[:, 3]
+    mags = zp - 2.5 * np.log10(som.weights)
+
+    try:
+        ug = mags[:, 0] - mags[:, 1]
+    except:
+        ug = np.zeros_like(mags[:, 0])
+    try:
+        gi = mags[:, 1] - mags[:, 3]
+    except:
+        gi = np.zeros_like(mags[:, 1])
+    try:
+        iy = mags[:, 3] - mags[:, 5]
+    except Exception as e:
+        iy = np.zeros_like(mags[:, 3])
+        print(f"Warning: plotting error in somDomainColorsnok: {e}")
+    try:
+        imag = mags[:, index_mag]
+    except:
+        imag = np.zeros_like(mags[:, index_mag])
+        
     fig = pl.figure(figsize=(10, 9))
 
     fig, ax = pl.subplots(nrows=2, ncols=2, figsize=(8, 8))
@@ -783,7 +803,7 @@ def somDomainColorsnok(som):  # pragma: no cover
     ax[1, 1].set_title('imag')
     ax[1, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 1])
-    return
+    return fig
 
 
 def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):  # pragma: no cover
@@ -838,10 +858,10 @@ def plotSOMz(som, cells, zz, subsamp=1, figsize=(8, 8)):  # pragma: no cover
     ax[1, 1].set_title('stddev / local slope')
     pl.colorbar(im, ax=ax[1, 1])
 
-    return
+    return fig
 
 
-def somDomainColors_withname(som, indexall, nameall, zp=22.5):  # pragma: no cover
+def somDomainColors_withname(som, indexall, nameall, zp=30.):  # pragma: no cover
     [index00, index01], [index10, index11], [index20, index21], index3 = indexall
     [name00, name01], [name10, name11], [name20, name21], [name3] = nameall
     # Make 4-panel plot colors and mag across SOM space
@@ -876,9 +896,9 @@ def somDomainColors_withname(som, indexall, nameall, zp=22.5):  # pragma: no cov
     ax[1, 1].set_title(f'{name3}mag')
     ax[1, 1].set_aspect('equal')
     pl.colorbar(im, ax=ax[1, 1])
-    return
+    return fig
 
-def somPlot2d_withname(som, indexall, nameall, zp=22.5):  # pragma: no cover
+def somPlot2d_withname(som, indexall, nameall, zp=30.):  # pragma: no cover
     [index00, index01], [index10, index11], index2 = indexall
     [name00, name01], [name10, name11], name2 = nameall
     # Make a 2d plot of cells weights in color-color diagram space.
@@ -909,4 +929,4 @@ def somPlot2d_withname(som, indexall, nameall, zp=22.5):  # pragma: no cover
     cb.set_label('imag')
     pl.xlabel('gi')
     pl.ylabel('ik')
-    return
+    return fig

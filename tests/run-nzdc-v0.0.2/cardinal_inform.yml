@@ -1,0 +1,25 @@
+output_dir: .
+log_dir: .
+resume: true
+config: cardinal_inform_config.yml
+modules: rail
+inputs:
+  input_deep_data: /scratch/gpfs/jm8767/desc/public/nz_challenge_taskset_1_cardinal_1yr_ddf_00_forsompz.hdf5
+  input_wide_data: /scratch/gpfs/jm8767/desc/public/nz_challenge_taskset_1_cardinal_1yr_wfd_forsompz.hdf5
+stages:
+- name: som_deep_informer_big
+  classname: SOMPZInformer
+  module_name: rail.estimation.algos.sompz
+  aliases:
+    model: model_som_deep_informer
+    input_data: input_deep_data
+- name: som_wide_informer_big
+  classname: SOMPZInformer
+  module_name: rail.estimation.algos.sompz
+  aliases:
+    model: model_som_wide_informer
+    input_data: input_wide_data
+site:
+  max_threads: 4
+  name: local
+  # name: cori-batch

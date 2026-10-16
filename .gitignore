@@ -1,3 +1,17 @@
+out/
+tests/DEMODATA
+tests/old
+tests/run-*/
+misc/
+
+*.hdf5
+*.h5
+*.out
+*.npz
+*.pkl
+*.py~
+*.DS_Store
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]

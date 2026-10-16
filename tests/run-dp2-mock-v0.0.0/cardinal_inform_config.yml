@@ -1,0 +1,31 @@
+som_deep_informer_big:
+  output_mode: default
+  redshift_col: redshift
+  hdf5_groupname: ''
+  nprocess: 4
+  inputs:
+  - mag_g_lsst
+  - mag_r_lsst
+  - mag_i_lsst
+  - mag_z_lsst
+  input_errs:
+  - mag_g_lsst_err
+  - mag_r_lsst_err
+  - mag_i_lsst_err
+  - mag_z_lsst_err
+  zero_points:
+  - 30
+  - 30
+  - 30
+  - 30
+  som_shape: [32, 32]
+  som_minerror: 0.001
+  som_wrap: false
+  som_take_log: true
+  convert_to_flux: true
+  set_threshold: true
+  thresh_val: 1.0e-05
+  thresh_val_err: 1.0e-05
+  name: som_deep_informer_big
+  model: model_deep.pkl
+  config: null
