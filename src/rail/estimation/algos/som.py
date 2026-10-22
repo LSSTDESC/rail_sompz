@@ -329,14 +329,13 @@ class NoiseSOM:
         dsq = np.zeros(nPts, dtype=float)
         t0 = time.time()
         for first in range(0, nPts, blocksize):
-            if first % 5000 == 0:
-                deltat = time.time() - t0
-                print(f"classifying {first} {deltat:.2f}", flush=True)
             last = min(first + blocksize, nPts)
             d = self.metric(self.weights, data[first:last], errors[first:last])
             bb = np.argmin(d, axis=0)
             bmu[first:last] = bb
             dsq[first:last] = d[bb, np.arange(d.shape[1])]
+        deltat = time.time() - t0
+        print(f"Took {deltat:.2f}s to classify {nPts} rows")
         return bmu, dsq
 
     def fuzzyProb(self, fluxes, invVars,
