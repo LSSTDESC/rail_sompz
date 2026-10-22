@@ -29,10 +29,20 @@ def parallel_dsq(vn, s, w, df, h, sPenalty):
                              np.ascontiguousarray(h),
                              np.ascontiguousarray(sPenalty.reshape(-1)))
 
+_LN2 = 0.6931471805599453
+_MANT_MASK = np.int64(0x000FFFFFFFFFFFFF)
+_ONE_BITS = np.int64(0x3FF0000000000000)
+
+
 @numba.njit(parallel=True, fastmath={'contract', 'reassoc', 'arcp'})
 def parallel_dsq_core(vn, s, w, df, h, sPenalty):
     # vn: (nCells,nTargets,nFeatures), s/sPenalty: (nS,), w/df/h: (nTargets,nFeatures)
     # Returns (nCells,nTargets): min over scales of the distance-sq.
+    #
+    # Without SVML numba calls scalar libm for arcsinh/log, which dominates the
+    # run time. So the scale loop is innermost and contiguous, and arcsinh is
+    # built from sqrt plus a hand-rolled log that LLVM can auto-vectorize:
+    # arcsinh(x) = log(x + sqrt(x^2 + 1)), valid here since x = s*vn > 0.
     nCells, nTargets, nFeatures = vn.shape
     nS = s.shape[0]
     lnS = np.log(s)
@@ -41,23 +51,58 @@ def parallel_dsq_core(vn, s, w, df, h, sPenalty):
     winv = w * inv
     out = np.empty((nCells, nTargets))
     for ci in numba.prange(nCells):
-        lv = np.empty(nFeatures)
+        acc = np.empty(nS)
+        # t holds x + sqrt(x^2+1); its bits are read via tb, and the
+        # mantissa-only bits are written to mb and read back as floats via mf
+        t = np.empty(nS)
+        tb = t.view(np.int64)
+        mb = np.empty(nS, dtype=np.int64)
+        mf = mb.view(np.float64)
         for ti in range(nTargets):
-            # log(2 s vn) = log(2 vn) + log(s): hoist the log out of the scale loop
+            for si in range(nS):
+                acc[si] = sPenalty[si]
             for fi in range(nFeatures):
-                lv[fi] = np.log(2.0 * vn[ci, ti, fi])
+                v = vn[ci, ti, fi]
+                iv = inv[ti, fi]
+                wi = winv[ti, fi]
+                dfi = df[ti, fi]
+                hi = h[ti, fi]
+                lv = np.log(2.0 * v)
+                for si in range(nS):
+                    x = s[si] * v
+                    t[si] = x + np.sqrt(x * x + 1.0)
+                # split t = m * 2^e with m in [1,2)
+                for si in range(nS):
+                    mb[si] = (tb[si] & _MANT_MASK) | _ONE_BITS
+                for si in range(nS):
+                    m = mf[si]
+                    e = np.float64((tb[si] >> 52) - 1023)
+                    # centre m on 1: m in [sqrt(.5), sqrt(2))
+                    big = m > 1.4142135623730951
+                    m = m * 0.5 if big else m
+                    e = e + 1.0 if big else e
+                    f = (m - 1.0) / (m + 1.0)
+                    f2 = f * f
+                    # log(m) = 2 atanh(f) = 2f (1 + f2/3 + f2^2/5 + ...)
+                    p = 1.0 / 21.0
+                    p = p * f2 + 1.0 / 19.0
+                    p = p * f2 + 1.0 / 17.0
+                    p = p * f2 + 1.0 / 15.0
+                    p = p * f2 + 1.0 / 13.0
+                    p = p * f2 + 1.0 / 11.0
+                    p = p * f2 + 1.0 / 9.0
+                    p = p * f2 + 1.0 / 7.0
+                    p = p * f2 + 1.0 / 5.0
+                    p = p * f2 + 1.0 / 3.0
+                    p = p * f2 + 1.0
+                    asinh = e * _LN2 + 2.0 * f * p
+                    # Eqn A6 of Sanchez+2020
+                    d = (asinh * iv + wi * (lv + lnS[si]) - dfi) * hi
+                    acc[si] += d * d
             best = np.inf
             for si in range(nS):
-                ss = s[si]
-                acc = 0.0
-                for fi in range(nFeatures):
-                    # Eqn A6 of Sanchez+2020
-                    a = np.arcsinh(ss * vn[ci, ti, fi]) * inv[ti, fi]
-                    d = (a + winv[ti, fi] * (lv[fi] + lnS[si]) - df[ti, fi]) * h[ti, fi]
-                    acc += d * d
-                acc += sPenalty[si]
-                if acc < best:
-                    best = acc
+                if acc[si] < best:
+                    best = acc[si]
             out[ci, ti] = best
     return out
 
