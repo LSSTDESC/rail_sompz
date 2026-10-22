@@ -22,20 +22,29 @@ def parallel_dsq(vn, s, w, df, h, sPenalty):
     # the core routine indexes s/sPenalty by scale explicitly rather than
     # relying on numpy broadcasting (numba's parfor broadcast inference is
     # unreliable across mixed-rank arrays).
-    return parallel_dsq_core(np.ascontiguousarray(vn),
-                             np.ascontiguousarray(s.reshape(-1)),
-                             np.ascontiguousarray(w),
-                             np.ascontiguousarray(df),
-                             np.ascontiguousarray(h),
-                             np.ascontiguousarray(sPenalty.reshape(-1)))
+    # The core runs in single precision for double the SIMD width.
+    f32 = np.float32
+    out = parallel_dsq_core(np.ascontiguousarray(vn, dtype=f32),
+                            np.ascontiguousarray(s.reshape(-1), dtype=f32),
+                            np.ascontiguousarray(w, dtype=f32),
+                            np.ascontiguousarray(df, dtype=f32),
+                            np.ascontiguousarray(h, dtype=f32),
+                            np.ascontiguousarray(sPenalty.reshape(-1), dtype=f32))
+    return out.astype(np.float64)
 
-_LN2 = 0.6931471805599453
-_MANT_MASK = np.int64(0x000FFFFFFFFFFFFF)
-_ONE_BITS = np.int64(0x3FF0000000000000)
+_F = np.float32
+_LN2 = _F(0.6931471805599453)
+_ONE = _F(1.0)
+_TWO = _F(2.0)
+_HALF = _F(0.5)
+_SQRT2 = _F(1.4142135623730951)
+_MANT_MASK = np.int32(0x007FFFFF)
+_ONE_BITS = np.int32(0x3F800000)
 
 
 @numba.njit(parallel=True, fastmath={'contract', 'reassoc', 'arcp'})
 def parallel_dsq_core(vn, s, w, df, h, sPenalty):
+    # All float arguments are float32.
     # vn: (nCells,nTargets,nFeatures), s/sPenalty: (nS,), w/df/h: (nTargets,nFeatures)
     # Returns (nCells,nTargets): min over scales of the distance-sq.
     #
@@ -47,17 +56,17 @@ def parallel_dsq_core(vn, s, w, df, h, sPenalty):
     nS = s.shape[0]
     lnS = np.log(s)
     # Per (target,feature) constants: 1/(1+w) and w/(1+w)
-    inv = 1.0 / (1.0 + w)
+    inv = _ONE / (_ONE + w)
     winv = w * inv
-    out = np.empty((nCells, nTargets))
+    out = np.empty((nCells, nTargets), dtype=np.float32)
     for ci in numba.prange(nCells):
-        acc = np.empty(nS)
+        acc = np.empty(nS, dtype=np.float32)
         # t holds x + sqrt(x^2+1); its bits are read via tb, and the
         # mantissa-only bits are written to mb and read back as floats via mf
-        t = np.empty(nS)
-        tb = t.view(np.int64)
-        mb = np.empty(nS, dtype=np.int64)
-        mf = mb.view(np.float64)
+        t = np.empty(nS, dtype=np.float32)
+        tb = t.view(np.int32)
+        mb = np.empty(nS, dtype=np.int32)
+        mf = mb.view(np.float32)
         for ti in range(nTargets):
             for si in range(nS):
                 acc[si] = sPenalty[si]
@@ -67,44 +76,39 @@ def parallel_dsq_core(vn, s, w, df, h, sPenalty):
                 wi = winv[ti, fi]
                 dfi = df[ti, fi]
                 hi = h[ti, fi]
-                lv = np.log(2.0 * v)
+                lv = np.log(_TWO * v)
                 for si in range(nS):
                     x = s[si] * v
-                    t[si] = x + np.sqrt(x * x + 1.0)
+                    t[si] = x + np.sqrt(x * x + _ONE)
                 # split t = m * 2^e with m in [1,2)
                 for si in range(nS):
                     mb[si] = (tb[si] & _MANT_MASK) | _ONE_BITS
                 for si in range(nS):
                     m = mf[si]
-                    e = np.float64((tb[si] >> 52) - 1023)
+                    e = np.float32((tb[si] >> 23) - 127)
                     # centre m on 1: m in [sqrt(.5), sqrt(2))
-                    big = m > 1.4142135623730951
-                    m = m * 0.5 if big else m
-                    e = e + 1.0 if big else e
-                    f = (m - 1.0) / (m + 1.0)
+                    big = m > _SQRT2
+                    m = m * _HALF if big else m
+                    e = e + _ONE if big else e
+                    f = (m - _ONE) / (m + _ONE)
                     f2 = f * f
                     # log(m) = 2 atanh(f) = 2f (1 + f2/3 + f2^2/5 + ...)
-                    p = 1.0 / 21.0
-                    p = p * f2 + 1.0 / 19.0
-                    p = p * f2 + 1.0 / 17.0
-                    p = p * f2 + 1.0 / 15.0
-                    p = p * f2 + 1.0 / 13.0
-                    p = p * f2 + 1.0 / 11.0
-                    p = p * f2 + 1.0 / 9.0
-                    p = p * f2 + 1.0 / 7.0
-                    p = p * f2 + 1.0 / 5.0
-                    p = p * f2 + 1.0 / 3.0
-                    p = p * f2 + 1.0
-                    asinh = e * _LN2 + 2.0 * f * p
+                    p = _F(1.0 / 9.0)
+                    p = p * f2 + _F(1.0 / 7.0)
+                    p = p * f2 + _F(1.0 / 5.0)
+                    p = p * f2 + _F(1.0 / 3.0)
+                    p = p * f2 + _ONE
+                    asinh = e * _LN2 + _TWO * f * p
                     # Eqn A6 of Sanchez+2020
                     d = (asinh * iv + wi * (lv + lnS[si]) - dfi) * hi
                     acc[si] += d * d
-            best = np.inf
-            for si in range(nS):
+            best = acc[0]
+            for si in range(1, nS):
                 if acc[si] < best:
                     best = acc[si]
             out[ci, ti] = best
     return out
+
 
 class NoiseSOM:
     """Class to build a SOM that deals with noisy data."""
