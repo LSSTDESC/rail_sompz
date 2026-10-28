@@ -1729,7 +1729,6 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
         if self.config.make_equal_occ_bins:
             nbins = self.config.n_equal_occ_bins
             tomo_bins_mapping, cells_by_bin = self.make_equal_occupation_bins(nbins, order_by_meanz_c, assignments, n_cells, overlap_weighted)
-
         else:
             nbins = len(bin_edges) - 1
             cells_by_bin = []
@@ -1740,7 +1739,7 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
                 cells_by_bin.append(np.where((meanz_c > bin_edges[i]) & (meanz_c < bin_edges[i+1]))[0])
 
             for i in range(len(cells_by_bin)):
-                tomo_bins_mapping[i] = cells_by_bin[i]
+                tomo_bins_mapping[str(i)] = cells_by_bin[i]
 
         tomo_bins_output = -1 * np.ones((self.deep_som_size, 2))
         for tomo_bin_idx, cells in tomo_bins_mapping.items():

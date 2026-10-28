@@ -66,7 +66,7 @@ def get_intermediates(request: pytest.FixtureRequest) -> int:
     
     if not os.path.exists("tests/intermediates.tgz"):
         urllib.request.urlretrieve(
-            "https://s3df.slac.stanford.edu/people/echarles/xfer/intermediates.tgz",
+            "https://s3df.slac.stanford.edu/people/echarles/package_test_data/rail_sompz/intermediates.tgz",
             "tests/intermediates.tgz",
         )
         if not os.path.exists("tests/intermediates.tgz"):
