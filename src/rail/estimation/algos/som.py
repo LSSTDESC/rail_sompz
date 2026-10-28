@@ -22,36 +22,93 @@ def parallel_dsq(vn, s, w, df, h, sPenalty):
     # the core routine indexes s/sPenalty by scale explicitly rather than
     # relying on numpy broadcasting (numba's parfor broadcast inference is
     # unreliable across mixed-rank arrays).
-    dsq0 = parallel_dsq_core(vn, np.ascontiguousarray(s.reshape(-1)), w, df, h,
-                              np.ascontiguousarray(sPenalty.reshape(-1)))
-    return np.min(dsq0, axis=0)
+    # The core runs in single precision for double the SIMD width.
+    f32 = np.float32
+    out = parallel_dsq_core(np.ascontiguousarray(vn, dtype=f32),
+                            np.ascontiguousarray(s.reshape(-1), dtype=f32),
+                            np.ascontiguousarray(w, dtype=f32),
+                            np.ascontiguousarray(df, dtype=f32),
+                            np.ascontiguousarray(h, dtype=f32),
+                            np.ascontiguousarray(sPenalty.reshape(-1), dtype=f32))
+    return out.astype(np.float64)
 
-@numba.njit(parallel=True)
+_F = np.float32
+_LN2 = _F(0.6931471805599453)
+_ONE = _F(1.0)
+_TWO = _F(2.0)
+_HALF = _F(0.5)
+_SQRT2 = _F(1.4142135623730951)
+_MANT_MASK = np.int32(0x007FFFFF)
+_ONE_BITS = np.int32(0x3F800000)
+
+
+@numba.njit(parallel=True, fastmath={'contract', 'reassoc', 'arcp'})
 def parallel_dsq_core(vn, s, w, df, h, sPenalty):
+    # All float arguments are float32.
     # vn: (nCells,nTargets,nFeatures), s/sPenalty: (nS,), w/df/h: (nTargets,nFeatures)
+    # Returns (nCells,nTargets): min over scales of the distance-sq.
+    #
+    # Without SVML numba calls scalar libm for arcsinh/log, which dominates the
+    # run time. So the scale loop is innermost and contiguous, and arcsinh is
+    # built from sqrt plus a hand-rolled log that LLVM can auto-vectorize:
+    # arcsinh(x) = log(x + sqrt(x^2 + 1)), valid here since x = s*vn > 0.
     nCells, nTargets, nFeatures = vn.shape
     nS = s.shape[0]
-    dsq0 = np.empty((nS, nCells, nTargets))
-    for si in numba.prange(nS):
-        ss = s[si]
-        pen = sPenalty[si]
-        for ci in range(nCells):
-            for ti in range(nTargets):
-                acc = 0.0
-                for fi in range(nFeatures):
-                    # vnS: see the paragraph containing equation A7 of Sanchez+2020
-                    vnS = ss * vn[ci, ti, fi]
-                    # dn: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb}
-                    dn = np.arcsinh(vnS)
-                    wv = w[ti, fi]
-                    # numerator: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{cb} + w_{ib} log 2 nu_{cb}
-                    numerator = dn + wv * np.log(2 * vnS)
-                    dn2 = numerator / (1 + wv)
-                    d = (dn2 - df[ti, fi]) * h[ti, fi]
-                    acc += d * d
-                # acc is distance-sq summed over features; add scale penalty
-                dsq0[si, ci, ti] = acc + pen
-    return dsq0
+    lnS = np.log(s)
+    # Per (target,feature) constants: 1/(1+w) and w/(1+w)
+    inv = _ONE / (_ONE + w)
+    winv = w * inv
+    out = np.empty((nCells, nTargets), dtype=np.float32)
+    for ci in numba.prange(nCells):
+        acc = np.empty(nS, dtype=np.float32)
+        # t holds x + sqrt(x^2+1); its bits are read via tb, and the
+        # mantissa-only bits are written to mb and read back as floats via mf
+        t = np.empty(nS, dtype=np.float32)
+        tb = t.view(np.int32)
+        mb = np.empty(nS, dtype=np.int32)
+        mf = mb.view(np.float32)
+        for ti in range(nTargets):
+            for si in range(nS):
+                acc[si] = sPenalty[si]
+            for fi in range(nFeatures):
+                v = vn[ci, ti, fi]
+                iv = inv[ti, fi]
+                wi = winv[ti, fi]
+                dfi = df[ti, fi]
+                hi = h[ti, fi]
+                lv = np.log(_TWO * v)
+                for si in range(nS):
+                    x = s[si] * v
+                    t[si] = x + np.sqrt(x * x + _ONE)
+                # split t = m * 2^e with m in [1,2)
+                for si in range(nS):
+                    mb[si] = (tb[si] & _MANT_MASK) | _ONE_BITS
+                for si in range(nS):
+                    m = mf[si]
+                    e = np.float32((tb[si] >> 23) - 127)
+                    # centre m on 1: m in [sqrt(.5), sqrt(2))
+                    big = m > _SQRT2
+                    m = m * _HALF if big else m
+                    e = e + _ONE if big else e
+                    f = (m - _ONE) / (m + _ONE)
+                    f2 = f * f
+                    # log(m) = 2 atanh(f) = 2f (1 + f2/3 + f2^2/5 + ...)
+                    p = _F(1.0 / 9.0)
+                    p = p * f2 + _F(1.0 / 7.0)
+                    p = p * f2 + _F(1.0 / 5.0)
+                    p = p * f2 + _F(1.0 / 3.0)
+                    p = p * f2 + _ONE
+                    asinh = e * _LN2 + _TWO * f * p
+                    # Eqn A6 of Sanchez+2020
+                    d = (asinh * iv + wi * (lv + lnS[si]) - dfi) * hi
+                    acc[si] += d * d
+            best = acc[0]
+            for si in range(1, nS):
+                if acc[si] < best:
+                    best = acc[si]
+            out[ci, ti] = best
+    return out
+
 
 class NoiseSOM:
     """Class to build a SOM that deals with noisy data."""
@@ -266,20 +323,19 @@ class NoiseSOM:
         Also returns a vector of the distance^2 to each BMU.
         """
         # Break the inputs into chunks for speed
-        blocksize = 100
+        blocksize = 1000
         nPts = data.shape[0]
         bmu = np.zeros(nPts, dtype=int)
         dsq = np.zeros(nPts, dtype=float)
         t0 = time.time()
         for first in range(0, nPts, blocksize):
-            if first % 5000 == 0:
-                deltat = time.time() - t0
-                print(f"classifying {first} {deltat:.2f}", flush=True)
             last = min(first + blocksize, nPts)
             d = self.metric(self.weights, data[first:last], errors[first:last])
             bb = np.argmin(d, axis=0)
             bmu[first:last] = bb
             dsq[first:last] = d[bb, np.arange(d.shape[1])]
+        deltat = time.time() - t0
+        print(f"Took {deltat:.2f}s to classify {nPts} rows")
         return bmu, dsq
 
     def fuzzyProb(self, fluxes, invVars,
@@ -439,11 +495,7 @@ class AsinhMetric:
 
         # Consider a range of rescaling options for the cells
         # and return the one with least distance.
-        # Break the cells into bunches to avoid super-large 4d arrays
 
-        chunk = max(1, cells.shape[0] // 512)
-        # dsq is the destination array for the results (distance-squared)
-        dsq = np.zeros((vn.shape[0], vf.shape[0]), dtype=float)
         # df is the asinh of the galaxy S/N values
         # df: see Eqn A6 of Sanchez+2020. Appears as asinh nu_{ib}
         df = np.arcsinh(vf)
