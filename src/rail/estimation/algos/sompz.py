@@ -2292,7 +2292,7 @@ class SOMPZnz_fast(CatEstimator):
             Input wide field data
 
         tomo_bins_wide : Table
-             Tomographci bin assingments for wide cels
+             Tomographic bin assingments for wide cells
 
         pc_chat : Table
             p(c|c_hat) data.
