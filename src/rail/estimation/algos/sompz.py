@@ -2358,7 +2358,7 @@ class SOMPZEstimatorBase(CatEstimator):
         self.som_size = np.array([int(s0 * s1)])
 
         nTrain = flux.shape[0]
-        som_weights = self.model['som'].weights
+        som_weights = self.model()['som'].weights
         hh = somfuncs.hFunc(nTrain, sigma=(30, 1))
         metric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         som = somfuncs.NoiseSOM(metric, None, None,
@@ -2504,7 +2504,9 @@ class SOMPZEstimatorWide(SOMPZEstimatorBase):
                         self.config["model"] = model.path
                 self.model = self.set_data("wide_model", model)
 
-        return self.model
+        #return self.model
+        return self.get_handle("wide_model")
+
 
 
 class SOMPZEstimatorDeep(SOMPZEstimatorBase):
@@ -2545,4 +2547,5 @@ class SOMPZEstimatorDeep(SOMPZEstimatorBase):
                         self.config["model"] = model.path
                 self.model = self.set_data("deep_model", model)
 
-        return self.model
+        return self.get_handle("deep_model")
+        #return self.model
