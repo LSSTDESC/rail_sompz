@@ -937,7 +937,7 @@ class SOMPZInformer(CatInformer):
         self.set_data('input_data', input_data)
         self.run()
         self.finalize()
-        return self.model
+        return self.get_handle("model")
 
 
 class SOMPZEstimator(CatEstimator):  # pragma: no cover
