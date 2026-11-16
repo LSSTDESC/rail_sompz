@@ -169,9 +169,10 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
     missing_cells = []
     populated_cells = []
 
+    groupby_obj = deep_data.groupby('cell_deep')
     for ci, c in enumerate(cells):
         try:
-            df = deep_data.groupby('cell_deep').get_group(c)
+            df = groupby_obj.get_group(c)
             if type(key) is str:
                 z = df[key].values
                 if overlap_weighted_pzc:  # pragma: no cover
