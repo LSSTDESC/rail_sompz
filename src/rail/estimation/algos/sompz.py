@@ -169,10 +169,10 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
     missing_cells = []
     populated_cells = []
 
-    grouped = deep_data.groupby('cell_deep')
+    groupby_obj = deep_data.groupby('cell_deep')
     for ci, c in enumerate(cells):
         try:
-            df = grouped.get_group(c)
+            df = groupby_obj.get_group(c)
             if type(key) is str:
                 z = df[key].values
                 if overlap_weighted_pzc:  # pragma: no cover
@@ -887,7 +887,6 @@ class SOMPZInformer(CatInformer):
     config_options = CatInformer.config_options.copy()
     config_options.update(redshift_col=SOMPZ_REDSHIFT_COL_PARAM,
                           hdf5_groupname=SHARED_PARAMS,
-                          nprocess=Param(int, 1, msg="number of processors to use"),
                           # groupname=Param(str, "photometry", msg="hdf5_groupname for ata"),
                           inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for data"),
                           input_errs=Param(list, default_err_names, msg="list of the names of columns containing errors on inputs for data"),
@@ -942,22 +941,11 @@ class SOMPZInformer(CatInformer):
         sommetric = somfuncs.AsinhMetric(lnScaleSigma=0.4, lnScaleStep=0.03)
         learn_func = somfuncs.hFunc(ngal, sigma=(30, 1))
 
-        # if 'pool' in self.config.keys():
-        #     self.pool, self.nprocess = self.config["pool"]
-        # else:
-        #     print("pool not specified, setting pool to None")
-        #     self.pool = None
-        #     self.nprocess = 0
-        #     self.config.pool = (None, 1)
-        pool = Pool(self.config.nprocess)
-        nprocess = self.config.nprocess
-        pooltuple = (pool, nprocess)
-
-        print(f"Training SOM of shape {self.config.som_shape} with pool made of {nprocess} processes...", flush=True)
+        print(f"Training SOM of shape {self.config.som_shape} ...", flush=True)
 
         som = somfuncs.NoiseSOM(sommetric, d_input, d_errs, learn_func,
                                 shape=self.config.som_shape, minError=self.config.som_minerror,
-                                wrap=self.config.som_wrap, logF=self.config.som_take_log, pool=pooltuple)
+                                wrap=self.config.som_wrap, logF=self.config.som_take_log)
         model = dict(som=som, columns=self.config.inputs,
                      err_columns=self.config.input_errs)
         self.add_data('model', model)
@@ -1760,7 +1748,7 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
                 start = stop
 
             for i in range(len(cells_by_bin)):
-                tomo_bins_mapping[i] = cells_by_bin[i]
+                tomo_bins_mapping[str(i)] = cells_by_bin[i]
         else:
             print(f"Using bins with edges {bin_edges}")
             for i in range(len(bin_edges)-1):
@@ -1768,7 +1756,7 @@ class SOMPZ_tomobin_and_nz_onesom(CatEstimator):
                 cells_by_bin.append(np.where((meanz_c > bin_edges[i]) & (meanz_c < bin_edges[i+1]))[0])
 
             for i in range(len(cells_by_bin)):
-                tomo_bins_mapping[i] = cells_by_bin[i]
+                tomo_bins_mapping[str(i)] = cells_by_bin[i]
 
         tomo_bins_output = -1 * np.ones((self.deep_som_size, 2))
         for tomo_bin_idx, cells in tomo_bins_mapping.items():
@@ -2343,14 +2331,7 @@ class SOMPZEstimatorBase(CatEstimator):
         self.model = None
         self.model = self.open_model(**self.config)  # None
         first = True
-        if self.config.hdf5_groupname:  # pragma: no cover
-            # print(self.config.hdf5_groupname)
-            self.input_iterator('data')
-            iter1 = self.input_iterator('data')[self.config.hdf5_groupname]
-        else:
-            iter1 = self.input_iterator('data')
-        # iter1 = self.input_iterator('data', groupname=self.config.hdf5_groupname)
-        # iter1 = self.input_iterator('data')
+        iter1 = self.input_iterator('data')
         self._output_handle = None
         for s, e, test_data in iter1:
             print(f"Process {self.rank} running creator on chunk {s} - {e}", flush=True)
