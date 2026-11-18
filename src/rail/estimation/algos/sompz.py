@@ -2037,7 +2037,9 @@ class SOMPZnz(CatEstimator):
 
 
 class SOMPZnz_fast(CatEstimator):
-    """Calculate nz using precomputed p(z|c) and p(c|chat)."""
+    """Calculate nz using precomputed p(z|c) and p(c|chat). 
+       When use_bin_conditioning=True, this function also computes p(z|c,\hat{b}) 
+       for use in n(z) inference and saves these as outputs"""
     name = "SOMPZnz_fast"
     config_options = CatEstimator.config_options.copy()
     config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
@@ -2064,8 +2066,8 @@ class SOMPZnz_fast(CatEstimator):
               ('pz_c', Hdf5Handle),
               ]
     outputs = [('nz', QPHandle),
-               ('pz_c_bin_conditioned', Hdf5Handle),
-               ('pz_chat_bin_conditioned', Hdf5Handle),
+               ('pz_c_bin_conditioned', Hdf5Handle), # deep som cell p(z|c,\hat{b}) conditioned on tomographic bins \hat{b}
+               ('pz_chat_bin_conditioned', Hdf5Handle), # wide som cell p(z|\hat{c}) evaluated using p(z|c, \hat{b})
                ]
 
     def __init__(self, args, **kwargs):

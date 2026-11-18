@@ -23,7 +23,9 @@ These catalogs are used to train two SOMs: one built with deep-field photometry 
 
 Once all samples are assigned to the wide SOM and `spec_data` and `balrog_data` are assigned to the deep SOM the wide SOM cells can be grouped into tomographic bins via a tomographic binning algorithm. The redshift distributions are computed as follows:
 
-$$ n(z|\hat{b}, \hat{s}) = \sum_{\hat{c} \in \hat{b}} \sum_{c \in \hat{c}} p(z|c, \hat{s}) p(c|\hat{c}, \hat{s}) p(\hat{c}| \hat{s}) $$
+$$ n(z|\hat{b}, \hat{s}) = \sum_{\hat{c} \in \hat{b}} \sum_{c \in \hat{c}} p(z|c, \hat{c}, \hat{s}) p(c|\hat{c}, \hat{s}) p(\hat{c}| \hat{s}) $$
+$$ n(z|\hat{b}, \hat{s}) \approx \sum_{\hat{c} \in \hat{b}} \sum_{c \in \hat{c}} p(z|c, \hat{b}, \hat{s}) p(c|\hat{c}, \hat{s}) p(\hat{c}| \hat{s}) $$
+$$ n(z|\hat{b}, \hat{s}) \approx \sum_{\hat{c} \in \hat{b}} \sum_{c \in \hat{c}} p(z|c, \hat{s}) p(c|\hat{c}, \hat{s}) p(\hat{c}| \hat{s}) $$
 
 # RAIL: Redshift Assessment Infrastructure Layers
 
