@@ -2,6 +2,7 @@ out/
 tests/DEMODATA
 tests/old
 tests/run-*/
+tests/run-*
 misc/
 
 *.hdf5

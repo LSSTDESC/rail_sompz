@@ -220,6 +220,35 @@ def get_deep_histograms(data, deep_data, key, cells, overlap_weighted_pzc, bins,
 
     return hists
 
+def get_deep_histograms_bin_conditioned(spec_data, tomo_cells, key, cells, zbins, overlap_weighted_pzc,
+                                        f=1.e9, cell_wide_key='cell_wide'):
+    """Compute bin-conditioned deep histograms p(z|c, bhat) for one tomographic bin.
+    """
+    had_overlap_weight = 'overlap_weight' in spec_data.columns
+    if had_overlap_weight:
+        stored_overlap_weight = spec_data['overlap_weight'].copy()  # save for later
+
+    if not overlap_weighted_pzc or not had_overlap_weight:
+        # we must set values for overlap_weight, even if the user doesn't want overlap weighting
+        # because overlap_weight is used to enable bin conditioning
+        spec_data['overlap_weight'] = np.ones(len(spec_data))
+
+    # upweight galaxies whose wide cell is in the bin
+    spec_data.loc[spec_data[cell_wide_key].isin(tomo_cells[:, 0]), 'overlap_weight'] *= f
+
+    hists = np.array(get_deep_histograms(None,  # this arg is not currently used in get_deep_histograms
+                                         spec_data,
+                                         key=key,
+                                         cells=cells,
+                                         overlap_weighted_pzc=True,  # hard-coded here
+                                         bins=zbins))
+
+    if had_overlap_weight:
+        spec_data['overlap_weight'] = stored_overlap_weight.copy()  # open jar
+    else:
+        spec_data.drop(columns=['overlap_weight'], inplace=True)
+
+    return hists
 
 def histogram(data, deep_data, key, cells, cell_weights, pcchat, overlap_weighted_pzc, deep_som_size=64 * 64, bins=None,
               individual_chat=False, interpolate_kwargs={}):
@@ -766,7 +795,7 @@ def define_tomo_bins_wide(pc_chat, deep_bins, dfilter=0.0):
     return wide_bins
 
 def nz_bin_conditioned(wide_data, spec_data, overlap_weighted_pchat, overlap_weighted_pzc, tomo_cells, zbins, pcchat,
-                       cell_wide_key='cell_wide', zkey='Z'):
+                       cell_wide_key='cell_wide', zkey='Z', deep_som_size=64 * 64):
     f"""Function to obtain p(z|bin,s): the redshift distribution of a tomographic bin
         including the tomographic selection effect in p(z|chat). 
         The truth: n(z| s-hat) = sum_{{c,c-hat}} p(z|c, chat, s-hat, ) p(c | chat, s-hat) p(c-hat)
@@ -806,6 +835,7 @@ def nz_bin_conditioned(wide_data, spec_data, overlap_weighted_pchat, overlap_wei
                                      overlap_weighted_pchat=overlap_weighted_pchat,
                                      overlap_weighted_pzc=True, # hard-coded here
                                      bins=zbins, pcchat=pcchat, 
+                                     deep_som_size=deep_som_size,
                                      tomo_bins={"mybin": tomo_cells}, key=zkey,
                                      force_assignment=False, 
                                      cell_key=cell_wide_key)
@@ -813,6 +843,7 @@ def nz_bin_conditioned(wide_data, spec_data, overlap_weighted_pchat, overlap_wei
     spec_data['overlap_weight'] = stored_overlap_weight.copy()  # open jar
 
     return nz[0]
+
 
 def pileup(hists, zbins, zmids, z_pileup, dz, weight): # , nbins
     """Cuts off z, zmid and Nz at a pileup-z; stack tail on pileup-z and renormalize"""
@@ -1972,7 +2003,8 @@ class SOMPZnz(CatEstimator):
                                               zbins=zbins, 
                                               pcchat = pc_chat, 
                                               cell_wide_key='cell_wide', 
-                                              zkey=key) for i in range(len(tomo_bins_wide))])
+                                              zkey=key,
+                                              deep_som_size=self.deep_som_size) for i in range(len(tomo_bins_wide))])
         else:
             nz = redshift_distributions_wide(data=wide_data_for_pz,
                                              deep_data=spec_data_for_pz,
@@ -2005,7 +2037,9 @@ class SOMPZnz(CatEstimator):
 
 
 class SOMPZnz_fast(CatEstimator):
-    """Calculate nz using precomputed p(z|c) and p(c|chat)."""
+    """Calculate nz using precomputed p(z|c) and p(c|chat). 
+       When use_bin_conditioning=True, this function also computes p(z|c,\hat{b}) 
+       for use in n(z) inference and saves these as outputs"""
     name = "SOMPZnz_fast"
     config_options = CatEstimator.config_options.copy()
     config_options.update(inputs=Param(list, default_input_names, msg="list of the names of columns to be used as inputs for deep data"),
@@ -2016,19 +2050,25 @@ class SOMPZnz_fast(CatEstimator):
                           zbins_dz=Param(float, 0.01, msg="delta z for defining output grid"),
                           overlap_weighted_pchat=Param(bool, False, msg="if True, use overlap_weight for p(chat)"),
                           overlap_weighted_pzc=Param(bool, False, msg="expected overlap weighting used to build input p(z|c)"),
+                          use_bin_conditioning=Param(bool, False, msg="if True, make bin-conditioned n(z)"),
+                          pileup_value=Param(float, 6.0, msg="value to use for pileup"),                          
                           )
     # Keep interface close to SOMPZnz so it is easy to swap stages in YAML
     # spec_data and cell_deep_spec_data are accepted for drop-in compatibility
     # but are not required here
     inputs = [('spec_data', TableHandle),
               ('cell_deep_spec_data', TableHandle),
+              ('cell_wide_spec_data', TableHandle),
               ('cell_wide_wide_data', TableHandle),
               ('wide_data', TableHandle),
               ('tomo_bins_wide', Hdf5Handle),
               ('pc_chat', Hdf5Handle),
               ('pz_c', Hdf5Handle),
               ]
-    outputs = [('nz', QPHandle)]
+    outputs = [('nz', QPHandle),
+               ('pz_c_bin_conditioned', Hdf5Handle), # deep som cell p(z|c,\hat{b}) conditioned on tomographic bins \hat{b}
+               ('pz_chat_bin_conditioned', Hdf5Handle), # wide som cell p(z|\hat{c}) evaluated using p(z|c, \hat{b})
+               ]
 
     def __init__(self, args, **kwargs):
         super().__init__(args, **kwargs)
@@ -2052,8 +2092,24 @@ class SOMPZnz_fast(CatEstimator):
         tomo_bins_wide = self._parse_tomo_bins_wide(tomo_bins_wide_in)
 
         pc_chat = np.asarray(self.get_data('pc_chat')['pc_chat'][:], dtype=float)
-        pz_c = np.asarray(self.get_data('pz_c')['pz_c'][:], dtype=float)
-        self.deep_som_size = pz_c.shape[0]
+        self.deep_som_size = pc_chat.shape[0]
+        key = self.config.redshift_col
+
+        if self.config.use_bin_conditioning:
+            # we cannot use the precomputed pz_c: p(z|c, bhat) must be computed
+            # per tomographic bin from the spec sample
+            pz_c = None
+            
+            spec_data = self.get_data('spec_data')
+            cell_deep_spec_data = self.get_data('cell_deep_spec_data')
+            cell_wide_spec_data = self.get_data('cell_wide_spec_data')
+            spec_data_for_pz = _table_cols_df(spec_data, key,
+                                dict(cell_deep=cell_deep_spec_data['cells'], 
+                                     cell_wide=cell_wide_spec_data['cells']))
+            if 'overlap_weight' in spec_data.keys(): # dtype.names:
+                spec_data_for_pz['overlap_weight'] = spec_data['overlap_weight']
+        else:
+            pz_c = np.asarray(self.get_data('pz_c')['pz_c'][:], dtype=float)
 
         zbins = _zbins_histogram_grid(
             self.config.zbins_min, self.config.zbins_max, self.config.zbins_dz,
@@ -2066,15 +2122,21 @@ class SOMPZnz_fast(CatEstimator):
             raise ValueError(f"pc_chat wide axis ({pc_chat.shape[1]}) != wide som size ({self.wide_som_size})")
 
         # p(chat | sample): fraction of sample in each wide SOM cell.
-        if self.config.overlap_weighted_pchat != self.config.overlap_weighted_pzc:
-            raise ValueError(
-                "Inconsistent overlap-weighting config in SOMPZnz_fast: "
-                f"overlap_weighted_pchat={self.config.overlap_weighted_pchat} "
-                f"!= overlap_weighted_pzc={self.config.overlap_weighted_pzc}. "
-                "The current implementation requires overlap_weighted_pchat and overlap_weighted_pzc to be the same here."
-            )
+        if self.config.use_bin_conditioning:
+            # parity with SOMPZnz's bin-conditioned path, which hard-codes
+            # overlap-weighted p(chat) and p(z|c) regardless of the config flags
+            overlap_weighted_pchat = True
+        else:
+            if self.config.overlap_weighted_pchat != self.config.overlap_weighted_pzc:
+                raise ValueError(
+                    "Inconsistent overlap-weighting config in SOMPZnz_fast: "
+                    f"overlap_weighted_pchat={self.config.overlap_weighted_pchat} "
+                    f"!= overlap_weighted_pzc={self.config.overlap_weighted_pzc}. "
+                    "The current implementation requires overlap_weighted_pchat and overlap_weighted_pzc to be the same here."
+                )
+            overlap_weighted_pchat = self.config.overlap_weighted_pchat
 
-        if self.config.overlap_weighted_pchat:
+        if overlap_weighted_pchat:
             wide_data = self.get_data('wide_data')
             if 'overlap_weight' not in wide_data.keys(): # dtype.names:
                 raise ValueError("overlap_weighted_pchat=True, but overlap_weight is missing from wide_data.")
@@ -2092,8 +2154,11 @@ class SOMPZnz_fast(CatEstimator):
 
         # Combine p(chat|sample), tomo-bin weights, and p(c|chat), then marginalize
         # deep-cell histograms p(z|c) to get n(z) per tomo bin.
+        all_deep_cells = np.arange(self.deep_som_size)
         bin_keys = sorted(tomo_bins_wide.keys())
         nz_rows = []
+        pz_c_bin_conditioned = []
+        pz_chat_bin_conditioned = []
         for bin_key in bin_keys:
             cells_use = tomo_bins_wide[bin_key][:, 0].astype(np.int64)
             cells_binweights = tomo_bins_wide[bin_key][:, 1].astype(float)
@@ -2101,9 +2166,26 @@ class SOMPZnz_fast(CatEstimator):
             p_chat_bin = np.zeros(self.wide_som_size, dtype=float)
             p_chat_bin[cells_use] = p_chat_sample[cells_use] * cells_binweights
 
-            p_c_bin = np.sum(pc_chat * p_chat_bin[None, :], axis=1)
-            hist = np.sum(pz_c * p_c_bin[:, None], axis=0)
+            if self.config.use_bin_conditioning:
+                # p(z|c, bhat) for this bin, replacing the precomputed global p(z|c)
+                pz_c_to_use = get_deep_histograms_bin_conditioned(spec_data_for_pz,
+                                                               tomo_cells=tomo_bins_wide[bin_key],
+                                                               key=key,
+                                                               cells=all_deep_cells,
+                                                               zbins=zbins,
+                                                               overlap_weighted_pzc=True,  # intentionally hard-coded here
+                                                               cell_wide_key='cell_wide')
+                pz_c_bin_conditioned.append(pz_c_to_use)
+                # p(z|chat, bhat) for this bin
+                pz_chat_bin_conditioned.append(np.einsum('cz,cn->zn', pz_c_to_use, pc_chat))
+            else:
+                pz_c_to_use = pz_c
+                # print('making p(z|chat,bhat)', pz_c_to_use.shape, pc_chat.shape)
+                # pz_chat_bin_conditioned = np.einsum('cz,cn->zn', pz_c_to_use, pc_chat) # np.sum(pz_c_to_use * pc_chat, axis=0)
 
+            p_c_bin = np.sum(pc_chat * p_chat_bin[None, :], axis=1)
+            hist = np.sum(pz_c_to_use * p_c_bin[:, None], axis=0)
+            
             norm = np.sum(hist * dz)
             if norm > 0:
                 hist = hist / norm
@@ -2111,12 +2193,23 @@ class SOMPZnz_fast(CatEstimator):
 
         nz = np.array(nz_rows)
         self.bincents = 0.5 * (zbins[1:] + zbins[:-1])
+
+        if self.config.pileup_value < self.config.zbins_max:
+            _, _, nz = pileup(nz, zbins, self.bincents, self.config.pileup_value, self.config.zbins_dz, weight=1)
+
         tomo_ens = qp.Ensemble(qp.interp, data=dict(xvals=self.bincents, yvals=nz))
         self.add_data('nz', tomo_ens)
 
-    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_wide_data, wide_data, tomo_bins_wide, pc_chat, pz_c):
+        pz_c_bin_conditioned = np.array(pz_c_bin_conditioned)
+        pz_chat_bin_conditioned = np.array(pz_chat_bin_conditioned)
+        self.add_data('pz_c_bin_conditioned', dict(pz_c_bin_conditioned=pz_c_bin_conditioned))
+        self.add_data('pz_chat_bin_conditioned', dict(pz_chat_bin_conditioned=pz_chat_bin_conditioned))
+
+    def estimate(self, spec_data, cell_deep_spec_data, cell_wide_spec_data, cell_wide_wide_data,
+                 wide_data, tomo_bins_wide, pc_chat, pz_c):
         self.set_data('spec_data', spec_data)
         self.set_data('cell_deep_spec_data', cell_deep_spec_data)
+        self.set_data('cell_wide_spec_data', cell_wide_spec_data)
         self.set_data('cell_wide_wide_data', cell_wide_wide_data)
         self.set_data('wide_data', wide_data)
         self.set_data('tomo_bins_wide', tomo_bins_wide)
